@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Linking } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  Linking,
+  ScrollView,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import {
   projectPersonalMeshActivationFailure,
@@ -74,6 +81,7 @@ export const ProUnlockModal: React.FC<Props> = ({
   };
 
   const handleActivate = async () => {
+    if (loading) return;
     const trimmed = licenseKey.trim();
     if (!trimmed) return;
 
@@ -122,7 +130,12 @@ export const ProUnlockModal: React.FC<Props> = ({
       title={success ? 'Pro activated' : 'Enter your license key'}
       closeLabel={success ? 'Done' : 'Cancel'}
     >
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+      >
         {success ? (
           <>
             <View style={styles.successIconWrap}>
@@ -151,7 +164,8 @@ export const ProUnlockModal: React.FC<Props> = ({
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              multiline
+              returnKeyType="go"
+              onSubmitEditing={handleActivate}
               value={licenseKey}
               onChangeText={t => {
                 setLicenseKey(t);
@@ -200,12 +214,15 @@ export const ProUnlockModal: React.FC<Props> = ({
             </TouchableOpacity>
           </>
         )}
-      </View>
+      </ScrollView>
     </AppSheet>
   );
 };
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+  scrollView: {
+    flexShrink: 1,
+  },
   content: {
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.lg,
