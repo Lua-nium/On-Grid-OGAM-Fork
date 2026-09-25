@@ -17,12 +17,11 @@ export interface ImageTabProps {
     models: RemoteModel[];
   }>;
   activeImageModelId: string | null;
+  loadedImageModelId: string | null;
   activeRemoteImageModelId: string | null;
   activeRemoteImageServerId: string | null;
   isAnyLoading: boolean;
   isLoadingImage: boolean;
-  /** Id of the image model being loaded right now (the row just tapped) — drives the per-row spinner. */
-  loadingModelId?: string | null;
   /** Server and model key for the remote row being selected. */
   loadingRemoteModelKey?: string | null;
   onSelectImageModel: (model: ONNXImageModel) => void;
@@ -35,11 +34,11 @@ export const ImageTab: React.FC<ImageTabProps> = ({
   downloadedImageModels,
   remoteVisionModels,
   activeImageModelId,
+  loadedImageModelId,
   activeRemoteImageModelId,
   activeRemoteImageServerId,
   isAnyLoading,
   isLoadingImage,
-  loadingModelId = null,
   loadingRemoteModelKey = null,
   onSelectImageModel,
   onUnloadImageModel,
@@ -49,7 +48,8 @@ export const ImageTab: React.FC<ImageTabProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
   const hasRemoteSelection = !!activeRemoteImageModelId && !!activeRemoteImageServerId;
-  const hasLoaded = !!activeImageModelId || !!activeRemoteImageModelId;
+  const hasSelection = !!activeImageModelId || !!activeRemoteImageModelId;
+  const isCurrentLoaded = !hasRemoteSelection && loadedImageModelId === activeImageModelId;
   const activeModel = hasRemoteSelection
     ? undefined
     : downloadedImageModels.find(m => m.id === activeImageModelId);
@@ -67,11 +67,11 @@ export const ImageTab: React.FC<ImageTabProps> = ({
 
   return (
     <>
-      {hasLoaded && (
+      {hasSelection && (
         <View>
           <View style={styles.loadedHeader}>
             <Icon name="check-circle" size={14} color={colors.success} />
-            <Text style={styles.loadedLabel}>Currently Loaded</Text>
+            <Text style={styles.loadedLabel}>{isCurrentLoaded ? 'Currently Loaded' : 'Selected Model'}</Text>
           </View>
           <ModelCard
             compact
@@ -89,7 +89,7 @@ export const ImageTab: React.FC<ImageTabProps> = ({
             trailing={<TouchableOpacity style={styles.unloadButton} onPress={onUnloadImageModel} disabled={isAnyLoading}>
               {isLoadingImage ? <LoadingDots color={colors.error} /> : <>
                 <Icon name="power" size={16} color={colors.error} />
-                <Text style={styles.unloadButtonText}>Unload</Text>
+                <Text style={styles.unloadButtonText}>{isCurrentLoaded ? 'Unload' : 'Deselect'}</Text>
               </>}
             </TouchableOpacity>}
           />
@@ -97,7 +97,7 @@ export const ImageTab: React.FC<ImageTabProps> = ({
       )}
 
       <Text style={styles.sectionTitle}>
-        {hasLoaded ? 'Switch Model' : 'Available Models'}
+        {hasSelection ? 'Switch Model' : 'Available Models'}
       </Text>
 
       {/* Local Image Models */}
@@ -141,11 +141,6 @@ export const ImageTab: React.FC<ImageTabProps> = ({
             const estimatedMemory = hardwareService.estimateImageModelRam(model);
             const memoryFits = !fileExceedsBudget(model.size, hardwareService.getTotalMemoryGB());
             const isCurrent = !hasRemoteSelection && activeImageModelId === model.id;
-            // While a load is in flight, the highlight + spinner follow the row being loaded, not the
-            // model still resident — so tapping B moves the selection to B at once (device 2026-07-14).
-            const isLoadingThis = loadingModelId === model.id;
-            const loadInProgress = loadingModelId != null;
-            const highlight = loadInProgress ? isLoadingThis : isCurrent;
             return (
               <ModelCard
                 key={model.id}
@@ -157,11 +152,10 @@ export const ImageTab: React.FC<ImageTabProps> = ({
                   model.style || 'Image',
                   `~${(estimatedMemory / (1024 * 1024 * 1024)).toFixed(1)} GB RAM${memoryFits ? '' : ' (may not fit)'}`,
                 ]}
-                isActive={highlight}
-                trailing={isLoadingThis ? <LoadingDots color={colors.primary} testID="model-row-loading" />
-                  : isCurrent && !loadInProgress
-                    ? <View style={styles.checkmark}><Icon name="check" size={16} color={colors.background} /></View>
-                    : null}
+                isActive={isCurrent}
+                trailing={isCurrent
+                  ? <View style={styles.checkmark}><Icon name="check" size={16} color={colors.background} /></View>
+                  : null}
                 onPress={() => onSelectImageModel(model)}
                 disabled={isAnyLoading || isCurrent}
               />

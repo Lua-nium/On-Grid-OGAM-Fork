@@ -285,9 +285,6 @@ export const useChatScreen = () => {
 
   useChatImageModelEffects({
     setDownloadedImageModels,
-    settings,
-    activeImageModelId,
-    downloadedModels,
   });
   useChatModelStateSync({
     activeModelInfo,

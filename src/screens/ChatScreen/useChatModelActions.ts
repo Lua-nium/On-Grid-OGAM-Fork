@@ -11,7 +11,6 @@ import { DownloadedModel, RemoteModel, ONNXImageModel, isLiteRTModel } from '../
 import logger from '../../utils/logger';
 import { ModelReadyOutcome, reasonFromLoadError } from './modelReadiness';
 import { isOverridableMemoryError } from '../../services/modelLoadErrors';
-import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -242,62 +241,12 @@ export async function ensureModelLoadedFn(
     : { ok: false, reason: 'load-threw', detail: 'the model is not resident after load' };
 }
 
-export async function proceedWithModelLoadFn(
-  deps: ModelActionDeps,
-  model: DownloadedModel,
-): Promise<void> {
-  // Close the picker FIRST so the load runs behind the dismissed sheet and the
-  // minimal in-chat loading card shows — not a load running with the sheet still open.
-  deps.setShowModelSelector(false);
-  // Route through the SINGLE shared override helper: the MEASURED residency loader
-  // is the authoritative gate, and its OverridableMemoryError drives the identical
-  // "Load Anyway" affordance every other surface (Home/ChatsList/ModelSelector) uses.
-  await loadModelWithOverride(
-    (opts) => activeModelService.loadTextModel(model.id, undefined, opts),
-    {
-      setAlertState: deps.setAlertState,
-      onAttemptStart: () => {
-        deps.setIsModelLoading(true);
-        deps.setLoadingModel(model);
-        deps.modelLoadStartTimeRef.current = Date.now();
-      },
-      onAttemptEnd: () => {
-        deps.setIsModelLoading(false);
-        deps.setLoadingModel(null);
-        deps.modelLoadStartTimeRef.current = null;
-      },
-      onSuccess: () => {
-        deps.setSupportsVision(loadedModelVision(model));
-        if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails && deps.activeConversationId) {
-          const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
-          deps.addMessage(deps.activeConversationId, {
-            role: 'assistant',
-            content: `_Model loaded: ${model.name} (${loadTime}s)_`,
-            isSystemInfo: true,
-          });
-        }
-      },
-    },
-  );
-}
-
-/**
- * Selecting a text model in chat is the SAME decision Home/ChatsList/ModelSelector
- * make: load it through the MEASURED residency loader, offering the shared
- * "Load Anyway" override if that loader refuses. There is NO separate predictive
- * pre-check gate here — the residency loader (makeRoomFor, evict-then-measure) is
- * authoritative, so a model the old fileSize×1.5 estimate would have blocked in
- * chat now loads exactly as it does from Home (bug OD3).
- */
 export async function handleModelSelectFn(
   deps: ModelActionDeps,
   model: DownloadedModel,
 ): Promise<void> {
-  if (llmService.getLoadedModelPath() === model.filePath) {
-    deps.setShowModelSelector(false);
-    return;
-  }
-  await proceedWithModelLoadFn(deps, model);
+  activeModelService.selectTextModel(model.id);
+  deps.setShowModelSelector(false);
 }
 
 export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> {
@@ -330,12 +279,9 @@ export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> 
 
 type ImageModelEffectsDeps = {
   setDownloadedImageModels: (models: ONNXImageModel[]) => void;
-  settings: { imageGenerationMode: string; autoDetectMethod: string; classifierModelId: string | null | undefined };
-  activeImageModelId: string | null;
-  downloadedModels: DownloadedModel[];
 };
 export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
-  const { setDownloadedImageModels, settings, activeImageModelId, downloadedModels } = deps;
+  const { setDownloadedImageModels } = deps;
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -356,27 +302,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
     }, 0);
     return () => { cancelled = true; clearTimeout(timer); };
 
-  }, []);
-  useEffect(() => {
-    let cancelled = false;
-    const preload = async () => {
-      if (
-        settings.imageGenerationMode === 'auto' && settings.autoDetectMethod === 'llm' &&
-        settings.classifierModelId && activeImageModelId
-      ) {
-        const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
-        if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
-          try {
-            if (!cancelled) await activeModelService.loadTextModel(settings.classifierModelId);
-          }
-          catch (error) { if (!cancelled) logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
-        }
-      }
-    };
-    preload();
-    return () => { cancelled = true; };
-
-  }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId]);
+  }, [setDownloadedImageModels]);
 }
 
 type ModelStateSyncDeps = {

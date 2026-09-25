@@ -19,7 +19,6 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import { onnxImageGeneratorService, activeModelService, llmService, remoteServerManager } from '../services';
-import { loadModelWithOverride } from '../services/loadModelWithOverride';
 import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { byRecentActivity } from '../utils/conversationOrdering';
@@ -66,30 +65,10 @@ export const ChatsListScreen: React.FC = () => {
     setShowModelSelector(true);
   };
 
-  const handleSelectTextModel = async (model: any) => {
-    // Shared inline Load-Anyway flow: a memory-blocked load offers "Load Anyway"
-    // here just like the chat screen (was a dead-end "Failed to load model").
-    await loadModelWithOverride(
-      (opts) => activeModelService.loadTextModel(model.id, undefined, opts),
-      {
-        setAlertState,
-        onAttemptStart: () => setIsModelLoading(true),
-        onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
-      },
-    );
-  };
-
-  const handleSelectImageModel = async (model: any) => {
-    await loadModelWithOverride(
-      (opts) => activeModelService.loadImageModel(model.id, undefined, opts),
-      {
-        setAlertState,
-        onAttemptStart: () => setIsModelLoading(true),
-        onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
-      },
-    );
+  const handleSelectTextModel = (model: any) => {
+    activeModelService.selectTextModel(model.id);
+    setShowModelSelector(false);
+    navigation.navigate('Chat', {});
   };
 
   const handleUnloadTextModel = async () => {
@@ -394,7 +373,6 @@ export const ChatsListScreen: React.FC = () => {
         visible={showModelSelector}
         onClose={() => setShowModelSelector(false)}
         onSelectModel={handleSelectTextModel}
-        onSelectImageModel={handleSelectImageModel}
         onUnloadModel={handleUnloadTextModel}
         onUnloadImageModel={handleUnloadImageModel}
         isLoading={isModelLoading}
