@@ -13,10 +13,13 @@ describe('opening a new chat with a selected local model', () => {
 
     await h.settle(500);
     expect(h.view!.queryByText('Start a Conversation')).not.toBeNull();
+    expect(h.view!.queryByText('Loading Model')).toBeNull();
     expect(h.boundary.llama!.module.initLlama).not.toHaveBeenCalled();
     expect(h.view!.queryByText('Load Anyway')).toBeNull();
 
     await h.send('Hi', { text: 'Hello.' });
+    expect(h.view!.queryByText('Loading Model')).toBeNull();
+    expect(h.view!.queryByTestId('chat-input')).not.toBeNull();
     await h.rtl.waitFor(() => expect(h.view!.queryByText('Hello.')).not.toBeNull());
     expect(h.boundary.llama!.module.initLlama).toHaveBeenCalledTimes(1);
   });
