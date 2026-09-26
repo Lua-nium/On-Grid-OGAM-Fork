@@ -100,6 +100,9 @@ class LiteRTService {
 
   async loadModel(modelPath: string, preferredBackend: LiteRTBackend, opts: { supportsVision?: boolean; supportsAudio?: boolean; maxNumTokens?: number } = {}): Promise<void> {
     if (!this.isAvailable()) throw new Error('LiteRT is not available on this platform');
+    // NPU was exposed in a test build, but is not part of this release.
+    // Keep saved selections usable without attempting an unsupported native load.
+    if (preferredBackend === 'npu') preferredBackend = 'gpu';
     const { supportsVision = false, supportsAudio = false, maxNumTokens = 4096 } = opts;
     this.configuredMaxTokens = maxNumTokens;
     logger.log(TAG, `loadModel — path=${modelPath} backend=${preferredBackend} supportsVision=${supportsVision} supportsAudio=${supportsAudio} maxNumTokens=${maxNumTokens}`);

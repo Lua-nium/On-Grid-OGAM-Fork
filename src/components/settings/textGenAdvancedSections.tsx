@@ -106,12 +106,11 @@ export const BackendSelector: React.FC = () => {
 const LITERT_BACKENDS: { id: LiteRTBackend; label: string; desc: string }[] = [
   { id: 'gpu', label: 'GPU', desc: 'Run on GPU via OpenCL. Best performance on most devices.' },
   { id: 'cpu', label: 'CPU', desc: 'Always available. Use for battery savings or thermal relief.' },
-  { id: 'npu', label: 'NPU (Beta)', desc: 'Try NPU with a compatible model and runtime. Falls back to GPU or CPU if unavailable. Requires model reload.' },
 ];
 
 export const LiteRTBackendSelector: React.FC = () => {
   const { settings, updateSettings } = useAppStore();
-  const current = settings.liteRTBackend ?? 'gpu';
+  const current = settings.liteRTBackend === 'cpu' ? 'cpu' : 'gpu';
   return (
     <SegmentedRow<LiteRTBackend>
       label="Acceleration"

@@ -109,6 +109,7 @@ export interface LiteRTFake {
   events: FakeEmitterHandle;
   /** Records of every generateRaw / sendMessage* call for arg assertions. */
   calls: {
+    loadModel: unknown[][];
     generateRaw: unknown[][];
     resetConversation: unknown[][];
     sendMessage: unknown[][];
@@ -159,6 +160,7 @@ const defer = (fn: () => void) => {
 
 function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   const calls: LiteRTFake['calls'] = {
+    loadModel: [],
     generateRaw: [],
     resetConversation: [],
     sendMessage: [],
@@ -230,9 +232,10 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   };
 
   const module: Record<string, jest.Mock> = {
-    loadModel: jest
-      .fn()
-      .mockResolvedValue({ backend: 'gpu', maxNumTokens: 4096 }),
+    loadModel: jest.fn((...args: unknown[]) => {
+      calls.loadModel.push(args);
+      return Promise.resolve({ backend: 'gpu', maxNumTokens: 4096 });
+    }),
     resetConversation: jest.fn((...args: unknown[]) => {
       calls.resetConversation.push(args);
       return Promise.resolve();
