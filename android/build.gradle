@@ -5,7 +5,7 @@ buildscript {
         compileSdkVersion = 36
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
-        kotlinVersion = "2.2.0"
+        kotlinVersion = "2.4.0"
         // react-native-inappbrowser-reborn otherwise requests dynamic `+`
         // versions. Pin them so Gradle does not query unrelated repositories
         // for metadata during an offline/local build.
@@ -17,10 +17,12 @@ buildscript {
         mavenCentral()
     }
     dependencies {
+        // LiteRT-LM 0.17.1 uses Kotlin 2.4 metadata; AGP's bundled D8/R8 is older.
+        classpath("com.android.tools:r8:9.1.43")
         classpath("com.android.tools.build:gradle:8.8.2")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}")
-        classpath("com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:2.2.0-2.0.2")
+        classpath("com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:2.3.12")
     }
 }
 
