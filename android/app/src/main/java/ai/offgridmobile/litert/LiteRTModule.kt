@@ -54,6 +54,31 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         private const val CPU_BASE_TIMEOUT_MS = 90_000L
         private const val DEFAULT_CONTEXT_TOKENS = 4096
 
+        /** Preflight only: a matching filename is not proof that an imported model is valid. */
+        fun tensorNpuLoadError(
+            backend: String, socModel: String, isGoogleDevice: Boolean,
+            fileName: String, dispatchAvailable: Boolean,
+        ): String? {
+            val tensorFile = Regex(".*_Google_Tensor_(G[0-9]+)\\.litertlm", RegexOption.IGNORE_CASE)
+                .matchEntire(fileName)?.groupValues?.get(1)?.uppercase()
+            val npuRequested = backend.lowercase() in listOf("npu", "htp")
+            if (!npuRequested && tensorFile == null) return null
+            val tensorChip = Regex("Tensor[ _-]+(G[0-9]+)", RegexOption.IGNORE_CASE)
+                .matchEntire(socModel.trim())?.groupValues?.get(1)?.uppercase()
+            if (!isGoogleDevice && tensorChip == null && tensorFile == null) return null
+            if (tensorChip !in listOf("G5", "G6")) {
+                return "Tensor TPU inference requires a supported Tensor G5 or G6 device. Use a CPU/GPU model on this device."
+            }
+            if (tensorFile != tensorChip) {
+                return "This model is not a Tensor $tensorChip TPU model. Select a matching TPU model or use GPU/CPU."
+            }
+            if (!npuRequested) return "This Tensor TPU model requires the NPU backend."
+            if (!dispatchAvailable) {
+                return "This app build does not include the Tensor TPU runtime. Use a CPU/GPU model."
+            }
+            return null
+        }
+
         fun initTimeoutMs(backend: Backend, maxNumTokens: Int): Long {
             val base = when (backend) {
                 is Backend.NPU -> NPU_BASE_TIMEOUT_MS
@@ -120,6 +145,17 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
 
         scope.launch {
             try {
+                val tensorError = tensorNpuLoadError(
+                    backendStr,
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else "",
+                    Build.MANUFACTURER.equals("Google", ignoreCase = true),
+                    File(stripFileScheme(modelPath)).name,
+                    File(reactContext.applicationInfo.nativeLibraryDir, "libLiteRtDispatch_GoogleTensor.so").isFile,
+                )
+                if (tensorError != null) {
+                    safe.reject("LITERT_NPU_UNAVAILABLE", tensorError, null)
+                    return@launch
+                }
                 // Clamp the token budget to what free RAM can actually hold. The KV cache
                 // grows with the budget, and an over-budget request aborts engine creation
                 // (SIGABRT in nativeCreateEngine) or segfaults during inference. Degrading
