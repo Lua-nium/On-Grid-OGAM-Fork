@@ -214,7 +214,7 @@ export const ImageGenerationSection: React.FC = () => {
       <SliderSetting
         testID="image-size"
         label="Image Size"
-        description="Output resolution (smaller = faster, larger = more detail)"
+        description="Output resolution. Default: 512x512."
         // Single source of truth for the floor: SD-class models render garbage below the
         // sweet spot (256), so both this screen and the chat modal (ImageQualitySliders) share
         // the SAME min/fallback — the surfaces can't diverge and a sub-256 value is unreachable.

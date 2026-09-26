@@ -260,6 +260,17 @@ describe('ProDetailScreen', () => {
     );
   });
 
+  it('activates from the keyboard action', async () => {
+    mockActivateProByKey.mockResolvedValueOnce({ ok: true });
+    const { getByText, getByTestId } = render(<ProDetailScreen />);
+    fireEvent.press(getByText('I have a license key'));
+    fireEvent.changeText(getByTestId('license-key-input'), 'key/abc123');
+    fireEvent(getByTestId('license-key-input'), 'submitEditing');
+    await waitFor(() =>
+      expect(mockActivateProByKey).toHaveBeenCalledWith('key/abc123'),
+    );
+  });
+
   it('"Not a member yet? Get Pro" in the modal opens the pay page', () => {
     const { getByText } = render(<ProDetailScreen />);
     fireEvent.press(getByText('I have a license key'));

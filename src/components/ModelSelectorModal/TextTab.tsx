@@ -199,8 +199,8 @@ export const TextTab: React.FC<TextTabProps> = ({
             const fileSize = (model.fileSize || 0) + ('mmProjFileSize' in model ? (model.mmProjFileSize || 0) : 0);
             const memoryFits = !fileExceedsBudget(fileSize, hardwareService.getTotalMemoryGB());
             const isLoaded = currentModelPath === model.filePath;
-            // The selected-but-not-loaded model is highlighted as active, but stays
-            // tappable so tapping it actually loads it (load-on-tap).
+            // A selected-but-not-loaded model stays highlighted. A tap confirms the
+            // selection; the first chat message starts the load.
             // Don't highlight a deferred-local selection while a remote model is
             // current — otherwise both rows render active after a local→remote switch.
             const isSelected =

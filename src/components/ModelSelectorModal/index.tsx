@@ -18,7 +18,6 @@ import {
   remoteServerManager,
   remoteServerModelOptions,
 } from '../../services';
-import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 import {
   CustomAlert,
   AlertState,
@@ -125,12 +124,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const [loadingRemoteImageModelKey, setLoadingRemoteImageModelKey] = useState<
     string | null
   >(null);
-  // The image model currently being LOADED (the row the user just tapped) — distinct from
-  // activeImageModelId, which only flips to the new model on success. The row spinner keys off THIS,
-  // else it shows on the previously-active model instead of the one that's loading (device 2026-07-14).
-  const [loadingImageModelId, setLoadingImageModelId] = useState<string | null>(
-    null,
-  );
   // Which text row shows the spinner: the model the SERVICE is loading, and only while it is loading.
   //
   // This used to be the row the user tapped, cleared by an effect on the parent's isLoading. Tapping a
@@ -195,30 +188,12 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       .filter(group => group.models.length > 0);
   }, [servers, serverHealth]);
 
-  const handleSelectImageModel = async (model: ONNXImageModel) => {
-    if (activeImageModelId === model.id && !activeRemoteImageModelId) return;
-    // Shared inline Load-Anyway flow so a memory-blocked image load offers the
-    // override here too, instead of a dead-end "Failed to Load".
-    await loadModelWithOverride(
-      opts => activeModelService.loadImageModel(model.id, undefined, opts),
-      {
-        setAlertState,
-        onAttemptStart: () => {
-          setIsLoadingImage(true);
-          setLoadingImageModelId(model.id);
-        },
-        onAttemptEnd: () => {
-          setIsLoadingImage(false);
-          setLoadingImageModelId(null);
-        },
-        onSuccess: () => {
-          remoteServerManager.clearActiveRemoteMediaModel('image');
-          onSelectImageModel?.(model);
-          onSelectionComplete?.();
-        },
-        onError: error => logger.error('Failed to load image model:', error),
-      },
-    );
+  const handleSelectImageModel = (model: ONNXImageModel) => {
+    remoteServerManager.clearActiveRemoteMediaModel('image');
+    useAppStore.getState().setActiveImageModelId(model.id);
+    onSelectImageModel?.(model);
+    if (onSelectionComplete) onSelectionComplete();
+    else onClose();
   };
 
   const handleUnloadImageModel = async () => {
@@ -346,11 +321,11 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               downloadedImageModels={filteredDownloadedImageModels}
             remoteVisionModels={remoteImageModels}
               activeImageModelId={activeImageModelId}
+              loadedImageModelId={activeModelService.getLoadedModelIds().imageModelId}
               activeRemoteImageModelId={activeRemoteImageModelId}
             activeRemoteImageServerId={activeRemoteMediaServerIds.image ?? null}
               isAnyLoading={isAnyLoading}
               isLoadingImage={isLoadingImage}
-              loadingModelId={loadingImageModelId}
               loadingRemoteModelKey={loadingRemoteImageModelKey}
               onSelectImageModel={handleSelectImageModel}
               onSelectRemoteVisionModel={handleSelectRemoteVisionModel}

@@ -13,7 +13,7 @@ import { getImageGenAdvice } from '../utils/imageGenAdvice';
  * so a full SD1.5 model is a real speed/quality trade the user must steer. It lives in the
  * CHAT (above the composer, beside the other advisories) rather than buried in settings, so
  * a user hitting slow or garbled generations actually sees the fix. It self-hides once the
- * settings are good (256 / >=20 steps) and can be dismissed for the session.
+ * settings meet the minimum size and step count, and can be dismissed for the session.
  *
  * Design: tokens only (COLORS/SPACING/TYPOGRAPHY), Feather vector icons, weights <=400.
  */
@@ -47,12 +47,6 @@ export const ImageGenAdviceCard: React.FC = () => {
         <View style={styles.tipRow} testID="image-gen-advice-steps">
           <Icon name="arrow-up-circle" size={13} color={colors.textSecondary} style={styles.tipIcon} />
           <Text style={styles.tip}>Use 20 or more steps for good quality. Fewer steps look muddy.</Text>
-        </View>
-      )}
-      {advice.lowerSize && (
-        <View style={styles.tipRow} testID="image-gen-advice-size">
-          <Icon name="minimize-2" size={13} color={colors.textSecondary} style={styles.tipIcon} />
-          <Text style={styles.tip}>Try 256 for much faster generation with coherent results.</Text>
         </View>
       )}
       {advice.raiseSize && (

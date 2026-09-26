@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text } from 'react-native';
+import { ScrollView, View, Text } from 'react-native';
 import { LoadingDots } from '../LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../../components/AppSheet';
@@ -63,7 +63,10 @@ export const WhisperPickerSheet: React.FC<Props> = ({
       title="TRANSCRIPTION MODEL"
       enableDynamicSizing
     >
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+      >
         <RemoteModelOptionsSection
           category="transcription"
           onSelect={onClose}
@@ -155,7 +158,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({
             />
           );
         })}
-      </View>
+      </ScrollView>
     </AppSheet>
     <CustomAlert
       visible={alertState.visible}
@@ -169,6 +172,9 @@ export const WhisperPickerSheet: React.FC<Props> = ({
 };
 
 const createStyles = (colors: ThemeColors) => ({
+  scrollView: {
+    flexShrink: 1,
+  },
   content: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,

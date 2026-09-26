@@ -1,6 +1,7 @@
 package ai.offgridmobile.download
 
 import android.app.Application
+import kotlin.io.path.createTempFile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -150,7 +151,7 @@ class DownloadManagerModuleTest {
     @Test
     fun computeFileSha256MatchesKnownHash() {
         // echo -n "hello" | sha256sum = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
-        val tmp = createTempFile("sha256test", ".bin")
+        val tmp = createTempFile("sha256test", ".bin").toFile()
         try {
             tmp.writeBytes("hello".toByteArray(Charsets.UTF_8))
             assertEquals(
@@ -165,7 +166,7 @@ class DownloadManagerModuleTest {
     @Test
     fun computeFileSha256EmptyFileReturnsKnownHash() {
         // sha256 of empty input = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-        val tmp = createTempFile("sha256empty", ".bin")
+        val tmp = createTempFile("sha256empty", ".bin").toFile()
         try {
             tmp.writeBytes(ByteArray(0))
             assertEquals(
@@ -179,7 +180,7 @@ class DownloadManagerModuleTest {
 
     @Test
     fun computeFileSha256IsCaseInsensitiveCompatible() {
-        val tmp = createTempFile("sha256case", ".bin")
+        val tmp = createTempFile("sha256case", ".bin").toFile()
         try {
             tmp.writeBytes("hello".toByteArray(Charsets.UTF_8))
             val hash = WorkerDownload.computeFileSha256(tmp)

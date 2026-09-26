@@ -110,7 +110,7 @@ const LITERT_BACKENDS: { id: LiteRTBackend; label: string; desc: string }[] = [
 
 export const LiteRTBackendSelector: React.FC = () => {
   const { settings, updateSettings } = useAppStore();
-  const current = settings.liteRTBackend ?? 'gpu';
+  const current = settings.liteRTBackend === 'cpu' ? 'cpu' : 'gpu';
   return (
     <SegmentedRow<LiteRTBackend>
       label="Acceleration"

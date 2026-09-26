@@ -2,7 +2,6 @@
  * getImageGenAdvice — the GPU-path (mnn) speed/quality guidance rule. Only the mnn path
  * gets advice (NPU/CoreML are fast + fixed-shape). Encodes the on-device reality:
  *  - <20 steps looks muddy,
- *  - >256 is very slow on a mid-tier GPU,
  *  - <256 is GARBAGE (SD1.5 below training res), not just smaller.
  */
 import {
@@ -23,7 +22,7 @@ describe('defaultImageSteps', () => {
 describe('getImageGenAdvice', () => {
   it('gives NO advice for the NPU (qnn) path', () => {
     expect(getImageGenAdvice({ backend: 'qnn', steps: 8, width: 512 })).toEqual({
-      show: false, raiseSteps: false, lowerSize: false, raiseSize: false,
+      show: false, raiseSteps: false, raiseSize: false,
     });
   });
 
@@ -41,23 +40,21 @@ describe('getImageGenAdvice', () => {
     expect(getImageGenAdvice({ backend: 'mnn', steps: QUALITY_STEP_FLOOR, width: SWEET_SPOT_SIZE }).raiseSteps).toBe(false);
   });
 
-  it('recommends LOWERING size for speed when above the sweet spot', () => {
+  it('shows no advice at the default 512 resolution with sufficient steps', () => {
     const a = getImageGenAdvice({ backend: 'mnn', steps: 22, width: 512 });
-    expect(a.lowerSize).toBe(true);
     expect(a.raiseSize).toBe(false);
-    expect(a.show).toBe(true);
+    expect(a.show).toBe(false);
   });
 
   it('recommends RAISING size when below 256 (garbage, not "smaller") — the 128 case', () => {
     const a = getImageGenAdvice({ backend: 'mnn', steps: 22, width: 128 });
     expect(a.raiseSize).toBe(true);
-    expect(a.lowerSize).toBe(false);
     expect(a.show).toBe(true);
   });
 
   it('is quiet at the sweet spot (256, >=20 steps)', () => {
     expect(getImageGenAdvice({ backend: 'mnn', steps: 22, width: SWEET_SPOT_SIZE })).toEqual({
-      show: false, raiseSteps: false, lowerSize: false, raiseSize: false,
+      show: false, raiseSteps: false, raiseSize: false,
     });
   });
 
