@@ -1,4 +1,4 @@
-import { ModelFile } from '../types';
+import { DownloadedModel, ModelFile } from '../types';
 import { fileExceedsBudget } from './memoryBudget';
 
 // Synthetic parent id for the curated LiteRT models. Used both as the model id
@@ -15,6 +15,8 @@ export interface CuratedLiteRTEntry {
   highlight: string;
   liteRTVision: boolean;
   liteRTAudio: boolean;
+  /** Supported context for this pinned artifact, not the default load budget. */
+  maxContextTokens?: number;
   /**
    * Warning COPY to surface before downloading this file — DATA only, not a
    * device-blind "always warn" flag. Whether the warning actually shows is a
@@ -35,6 +37,9 @@ export const CURATED_LITERT_ENTRIES: readonly CuratedLiteRTEntry[] = [
     highlight: 'Up to 2x faster than CPU via GPU',
     liteRTVision: true,
     liteRTAudio: true,
+    // Google's Gallery 1_0_19 allowlist, same repo, revision, file and byte size:
+    // https://github.com/google-ai-edge/gallery/blob/main/model_allowlists/1_0_19.json
+    maxContextTokens: 32000,
   },
   {
     fileName: 'gemma-4-E4B-it.litertlm',
@@ -45,6 +50,7 @@ export const CURATED_LITERT_ENTRIES: readonly CuratedLiteRTEntry[] = [
     highlight: 'Higher quality, same hardware efficiency as E2B',
     liteRTVision: true,
     liteRTAudio: true,
+    maxContextTokens: 32000,
     confirmDownload: {
       title: 'Warning',
       message:
@@ -60,6 +66,19 @@ const CURATED_LITERT_INDEX: Map<string, CuratedLiteRTEntry> = new Map(
 export function getCuratedLiteRTEntry(fileName: string | undefined): CuratedLiteRTEntry | undefined {
   if (!fileName) return undefined;
   return CURATED_LITERT_INDEX.get(fileName);
+}
+
+/** Do not apply a catalog limit to an unrelated import with the same filename. */
+export function getCuratedLiteRTContextLimit(model: DownloadedModel | undefined): number | null {
+  if (model?.engine !== 'litert') return null;
+  const entry = getCuratedLiteRTEntry(model.fileName);
+  if (!entry || model.fileSize !== entry.sizeBytes) return null;
+  const matches = model.origin
+    ? model.origin.repoId === entry.hfRepoId
+      && model.origin.revision === entry.commitHash
+      && model.origin.path === entry.fileName
+    : model.id === `${LITERT_PARENT_ID}/${entry.fileName}`;
+  return matches ? entry.maxContextTokens ?? null : null;
 }
 
 /**

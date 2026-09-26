@@ -3,6 +3,9 @@ import { loadLlamaModelInfo } from 'llama.rn';
 import { DEFAULT_SETTINGS } from '../stores/appStore';
 import { selectIsLiteRT, useAppStore } from '../stores';
 import { modelMaxContextFromMetadata } from '../services/llmHelpers';
+import { readLiteRTMaxTokens } from '../services/liteRTMetadata';
+import { liteRTService } from '../services/litert';
+import { getCuratedLiteRTContextLimit } from '../services/curatedLiteRTRegistry';
 import {
   MAX_MAX_TOOL_CALLS,
   MIN_MAX_TOOL_CALLS,
@@ -44,8 +47,8 @@ const maxTokensCeiling = (contextLength: number): number =>
 
 /**
  * One headless settings model for both text-generation settings surfaces.
- * The app store owns selected values. The selected GGUF header supplies its
- * trained context limit before loading; loaded metadata supplies it afterward.
+ * The app store owns selected values. File metadata supplies model limits without
+ * loading an engine. A loaded LiteRT context is separate from its model limit.
  * Each surface owns only its layout and presentation.
  */
 export function useTextGenerationSettings() {
@@ -56,21 +59,24 @@ export function useTextGenerationSettings() {
   const selectedModelId = useAppStore(state => state.activeModelId);
   const loadedModelId = useAppStore(state => state.loadedTextModelId);
   const selectedModel = useAppStore(state => state.downloadedModels.find(m => m.id === state.activeModelId));
-  const selectedPath = selectedModel?.engine === 'llama' ? selectedModel.filePath : null;
+  const selectedPath = selectedModel?.filePath ?? null;
   const [headerContext, setHeaderContext] = useState<{ path: string; max: number | null } | null>(null);
 
   useEffect(() => {
-    if (!selectedPath || loadedModelId === selectedModelId) return;
+    if (!selectedPath || (!isLiteRT && loadedModelId === selectedModelId)) return;
     let cancelled = false;
-    loadLlamaModelInfo(selectedPath)
-      .then(info => {
-        if (!cancelled) setHeaderContext({ path: selectedPath, max: modelMaxContextFromMetadata(info as Record<string, unknown>) });
+    const readLimit = isLiteRT
+      ? readLiteRTMaxTokens(selectedPath)
+      : loadLlamaModelInfo(selectedPath).then(info => modelMaxContextFromMetadata(info as Record<string, unknown>));
+    readLimit
+      .then(max => {
+        if (!cancelled) setHeaderContext({ path: selectedPath, max });
       })
       .catch(() => {
         if (!cancelled) setHeaderContext({ path: selectedPath, max: null });
       });
     return () => { cancelled = true; };
-  }, [selectedPath, selectedModelId, loadedModelId]);
+  }, [selectedPath, selectedModelId, loadedModelId, isLiteRT]);
 
   const temperature = settings.temperature ?? DEFAULT_SETTINGS.temperature;
   const maxTokens = settings.maxTokens ?? DEFAULT_SETTINGS.maxTokens;
@@ -107,8 +113,19 @@ export function useTextGenerationSettings() {
   const liteRTMaxTokens =
     settings.liteRTMaxTokens ?? DEFAULT_SETTINGS.liteRTMaxTokens;
   const liteRTTopP = settings.liteRTTopP ?? DEFAULT_SETTINGS.liteRTTopP;
-  const liteRTModelLimit = loadedModelId === selectedModelId && selectedModelId && modelMaxContext
-    ? modelMaxContext : Math.max(liteRTMaxTokens, 512);
+  const liteRTKnownLimit = (headerContext?.path === selectedPath ? headerContext.max : null)
+    ?? getCuratedLiteRTContextLimit(selectedModel);
+  const liteRTModelLimit = liteRTKnownLimit ?? Math.max(liteRTMaxTokens, 512);
+  const liteRTLoadedContext = loadedModelId === selectedModelId && liteRTService.isModelLoaded()
+    ? liteRTService.getContextUsage().max : null;
+  const liteRTLimitDescription = liteRTKnownLimit ? `Model limit: ${liteRTKnownLimit} tokens.` : 'Model limit unavailable.';
+  const liteRTLoadedDescription = liteRTLoadedContext ? ` Loaded context: ${liteRTLoadedContext} tokens.` : '';
+
+  useEffect(() => {
+    if (isLiteRT && liteRTKnownLimit && liteRTMaxTokens > liteRTKnownLimit) {
+      updateSettings({ liteRTMaxTokens: liteRTKnownLimit });
+    }
+  }, [isLiteRT, liteRTKnownLimit, liteRTMaxTokens, updateSettings]);
 
   const toolCalls = {
     key: 'maxToolCalls',
@@ -216,17 +233,17 @@ export function useTextGenerationSettings() {
       key: 'liteRTMaxTokens',
       label: 'Max Tokens',
       description:
-        'Total token budget - input, history, and output combined (requires reload)',
-      value: liteRTMaxTokens,
-      min: 512,
+        `Total token budget - input, history, and output combined (requires reload). ${liteRTLimitDescription}${liteRTLoadedDescription}`,
+      value: Math.min(liteRTMaxTokens, liteRTModelLimit),
+      min: Math.min(512, liteRTModelLimit),
       max: liteRTModelLimit,
       step: 1024,
-      formatValue: formatContext,
+      formatValue: (value: number) => String(value),
       warning:
         liteRTMaxTokens > 8192
           ? 'High context uses significant RAM and may slow or crash on some devices'
           : null,
-      onChange: (value: number) => updateSettings({ liteRTMaxTokens: value }),
+      onChange: (value: number) => updateSettings({ liteRTMaxTokens: Math.min(value, liteRTModelLimit) }),
     },
     topP: {
       key: 'liteRTTopP',
