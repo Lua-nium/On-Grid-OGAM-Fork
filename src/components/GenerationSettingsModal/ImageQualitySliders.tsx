@@ -50,7 +50,7 @@ export const ImageQualityBasicSliders: React.FC = () => {
         testID="image-size"
         compact
         label="Image Size"
-        description="Output resolution. 256 is fastest with coherent results; 512 is most detailed but slow on GPU-only devices."
+        description="Output resolution. Default: 512x512."
         value={Math.max(SWEET_SPOT_SIZE, settings.imageWidth ?? DEFAULT_SETTINGS.imageWidth)}
         min={SWEET_SPOT_SIZE} max={512} step={64}
         formatValue={(v) => `${v}x${v}`}

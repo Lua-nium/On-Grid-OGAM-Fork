@@ -35,7 +35,7 @@ import {
   isSuspiciousRecoveredImageModel,
 } from '../utils/modelSelectorFilters';
 import { migratePersistedState } from './appStoreMigrations';
-import { defaultImageSteps, SWEET_SPOT_SIZE } from '../utils/imageGenAdvice';
+import { defaultImageSteps } from '../utils/imageGenAdvice';
 
 type OnboardingChecklist = {
   downloadedModel: boolean;
@@ -246,8 +246,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   imageSteps: defaultImageSteps(Platform.OS),
   imageGuidanceScale: 7.5,
   imageThreads: 4,
-  imageWidth: Platform.OS === 'android' ? 512 : SWEET_SPOT_SIZE,
-  imageHeight: Platform.OS === 'android' ? 512 : SWEET_SPOT_SIZE,
+  imageWidth: 512,
+  imageHeight: 512,
   imageUseOpenCL: true,
   enhanceImagePrompts: false,
   enableGpu: Platform.OS === 'ios',
