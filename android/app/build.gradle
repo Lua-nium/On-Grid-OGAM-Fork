@@ -196,3 +196,16 @@ dependencies {
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testImplementation("androidx.test:core:1.6.1")
 }
+
+// Native video setup is shared by command-line, IDE, and CI builds.
+// Configure tasks need the source tree before CMake evaluates it.
+def videoRoot = rootProject.projectDir.parentFile
+def prepareVideoRuntime = tasks.register("prepareVideoRuntime", Exec) {
+    workingDir videoRoot
+    commandLine "bash", new File(videoRoot, "scripts/prepare-video-runtime.sh").absolutePath, "--android"
+    inputs.files(fileTree(new File(videoRoot, "scripts/video")), new File(videoRoot, "scripts/prepare-video-runtime.sh"))
+    outputs.files(new File(videoRoot, ".video-build/runtime-ready"), new File(videoRoot, ".video-build/shaderc/bin/glslc"))
+}
+tasks.configureEach { task ->
+    if (task.name.startsWith("configureCMake")) task.dependsOn(prepareVideoRuntime)
+}
