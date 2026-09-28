@@ -89,6 +89,7 @@ android {
         coreLibraryDesugaringEnabled true
     }
 
+    externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt"; version "3.22.1" } }
     defaultConfig {
         applicationId "ai.offgridmobile"
         minSdkVersion rootProject.ext.minSdkVersion
