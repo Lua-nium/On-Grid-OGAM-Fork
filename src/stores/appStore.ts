@@ -24,6 +24,7 @@ import {
   INFERENCE_BACKENDS,
   LiteRTBackend,
   GeneratedImage,
+  GeneratedVideo,
 } from '../types';
 import {
   emitChangedModelSettings,
@@ -195,6 +196,10 @@ export interface AppState extends ProAccessSlice {
   setImageGenerationStatus: (status: string | null) => void;
   setImagePreviewPath: (path: string | null) => void;
   generatedImages: GeneratedImage[];
+  generatedVideos: GeneratedVideo[];
+  addGeneratedVideo: (video: GeneratedVideo) => void;
+  removeGeneratedVideo: (videoId: string) => void;
+  removeVideosByConversationId: (conversationId: string) => string[];
   addGeneratedImage: (image: GeneratedImage) => void;
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
@@ -417,6 +422,14 @@ export const useAppStore = create<AppState>()(
       setImagePreviewPath: path => set({ imagePreviewPath: path }),
       // Gallery
       generatedImages: [],
+      generatedVideos: [],
+      addGeneratedVideo: video => set(state => ({ generatedVideos: [video, ...state.generatedVideos] })),
+      removeGeneratedVideo: videoId => set(state => ({ generatedVideos: state.generatedVideos.filter(video => video.id !== videoId) })),
+      removeVideosByConversationId: conversationId => {
+        const videos = get().generatedVideos.filter(video => video.conversationId === conversationId);
+        set(state => ({ generatedVideos: state.generatedVideos.filter(video => video.conversationId !== conversationId) }));
+        return videos.map(video => video.id);
+      },
       addGeneratedImage: image =>
         set(state => ({
           generatedImages: [image, ...state.generatedImages],
@@ -494,6 +507,7 @@ function persistedAppState(state: AppState) {
         modelSettingProvenance: state.modelSettingProvenance,
         activeImageModelId: state.activeImageModelId,
         generatedImages: state.generatedImages,
+        generatedVideos: state.generatedVideos,
         warmedImageModels: state.warmedImageModels,
         textGenerationCount: state.textGenerationCount,
         imageGenerationCount: state.imageGenerationCount,

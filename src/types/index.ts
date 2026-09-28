@@ -195,7 +195,7 @@ export interface ModelRecommendation {
 // Media attachment types
 export interface MediaAttachment {
   id: string;
-  type: 'image' | 'document' | 'audio';
+  type: 'image' | 'document' | 'audio' | 'video';
   uri: string;
   mimeType?: string;
   width?: number;
@@ -404,6 +404,26 @@ export const INFERENCE_BACKENDS = {
 } as const;
 /** 'auto' = smart detect, 'force' = always generate image, 'disabled' = never */
 export type ImageModeState = 'auto' | 'force' | 'disabled';
+
+export interface GeneratedVideo {
+  id: string;
+  provenance?: RecordProvenance;
+  prompt: string;
+  negativePrompt?: string;
+  videoPath: string;
+  fileName?: string;
+  width: number;
+  height: number;
+  fps: number;
+  frames: number;
+  durationSeconds: number;
+  steps: number;
+  guidance: number;
+  seed: number;
+  modelId: string;
+  createdAt: string;
+  conversationId?: string;
+}
 
 export interface GeneratedImage {
   id: string;
