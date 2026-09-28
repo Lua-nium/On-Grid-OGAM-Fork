@@ -87,6 +87,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     deviceInfo,
     setDeviceInfo,
     generatedImages,
+    generatedVideos,
   } = useAppStore();
 
   const recentConversations = useChatStore(
@@ -375,6 +376,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     downloadedImageModels,
     activeImageModelId,
     generatedImages,
+    generatedVideos,
     conversationCount,
     activeTextModel,
     activeTextModelId,

@@ -74,6 +74,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     downloadedImageModels,
     activeImageModelId,
     generatedImages,
+    generatedVideos,
     conversationCount,
     activeTextModelId,
     activeTextModelName,
@@ -281,7 +282,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </AnimatedEntry>
           )}
 
-          {/* Image Gallery */}
+          {/* Media Gallery */}
           <AnimatedPressable
             style={styles.galleryCard}
             onPress={() => navigation.navigate('Gallery')}
@@ -291,8 +292,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <View style={styles.galleryCardInfo}>
               <Text style={styles.galleryCardTitle}>Image Gallery</Text>
               <Text style={styles.galleryCardMeta}>
-                {generatedImages.length}{' '}
-                {generatedImages.length === 1 ? 'image' : 'images'}
+                {generatedImages.length} images · {generatedVideos.length} videos
               </Text>
             </View>
             <Icon name="chevron-right" size={16} color={colors.textMuted} />

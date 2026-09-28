@@ -12,6 +12,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
+import Video from 'react-native-video';
 // Imported directly, not through the barrel: a component that reaches its sibling via the index
 // resolves undefined at render time.
 import { LoadingDots } from '../../LoadingDots';
@@ -197,6 +198,8 @@ export function MessageAttachments({
             styles={styles}
             colors={colors}
           />
+        ) : attachment.type === 'video' ? (
+          <Video key={attachment.id} source={{ uri: resolveMediaUri(attachment.uri) }} controls paused resizeMode="contain" style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' }} />
         ) : attachment.type === 'audio' ? (
           <AudioAttachment
             key={attachment.id}

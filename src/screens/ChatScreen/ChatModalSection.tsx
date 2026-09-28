@@ -6,6 +6,7 @@ import {
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { ImageViewerModal } from './ChatScreenComponents';
+import { useAppStore } from '../../stores/appStore';
 
 type StylesType = ReturnType<typeof createStyles>;
 type ColorsType = ReturnType<typeof useTheme>['colors'];
@@ -55,7 +56,10 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
   isModelLoading, imageCount, activeConversationId, navigation,
   viewerImageUri, setViewerImageUri, handleSaveImage,
   isRemote,
-}) => (
+}) => {
+  const videoCount = useAppStore(state => state.generatedVideos.filter(video => video.conversationId === activeConversationId).length);
+  const mediaCount = imageCount + videoCount;
+  return (
   <>
     <ProjectSelectorSheet
       visible={showProjectSelector}
@@ -87,9 +91,9 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
       visible={showSettingsPanel}
       onClose={() => setShowSettingsPanel(false)}
       onOpenProject={() => setShowProjectSelector(true)}
-      onOpenGallery={imageCount > 0 ? () => navigation.navigate('Gallery', { conversationId: activeConversationId }) : undefined}
+      onOpenGallery={mediaCount > 0 ? () => navigation.navigate('Gallery', { conversationId: activeConversationId }) : undefined}
       onDeleteConversation={activeConversation ? handleDeleteConversation : undefined}
-      conversationImageCount={imageCount}
+      conversationImageCount={mediaCount}
       activeProjectName={activeProject?.name || null}
       isRemote={isRemote}
     />
@@ -100,4 +104,5 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
       onSave={handleSaveImage}
     />
   </>
-);
+  );
+};

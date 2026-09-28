@@ -1,4 +1,10 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
+import { Alert, Modal, Share } from 'react-native';
+import Video from 'react-native-video';
+import RNFS from 'react-native-fs';
+import { useAppStore } from '../../stores/appStore';
+import { resolveDocumentPath } from '../../utils/resolveDocumentPath';
+import type { GeneratedVideo } from '../../types';
 import { View, Text, Image, TouchableOpacity, FlatList, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +24,11 @@ export const GalleryScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<GalleryScreenRouteProp>();
   const conversationId = route.params?.conversationId;
+  const [kind, setKind] = useState<'images' | 'videos'>('images');
+  const [selectedVideo, setSelectedVideo] = useState<GeneratedVideo | null>(null);
+  const videos = useAppStore(state => state.generatedVideos);
+  const removeVideo = useAppStore(state => state.removeGeneratedVideo);
+  const displayVideos = useMemo(() => conversationId ? videos.filter(video => video.conversationId === conversationId) : videos, [videos, conversationId]);
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -43,7 +54,7 @@ export const GalleryScreen: React.FC = () => {
     closeViewer,
   } = useGalleryActions(conversationId);
 
-  const screenTitle = conversationId ? 'Chat Images' : 'Gallery';
+  const screenTitle = conversationId ? 'Chat Media' : 'Gallery';
 
   const renderGridItem = ({ item, index }: { item: GeneratedImage; index: number }) => (
     <GalleryGridItem
@@ -102,7 +113,7 @@ export const GalleryScreen: React.FC = () => {
               <Icon name="x" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.title}>{screenTitle}</Text>
-            <Text style={styles.countBadge}>{displayImages.length}</Text>
+            <Text style={styles.countBadge}>{kind === 'images' ? displayImages.length : displayVideos.length}</Text>
             {displayImages.length > 0 && (
               <TouchableOpacity style={styles.headerButton} onPress={toggleSelectMode}>
                 <Icon name="check-square" size={20} color={colors.text} />
@@ -110,6 +121,13 @@ export const GalleryScreen: React.FC = () => {
             )}
           </>
         )}
+      </View>
+
+      <View style={{ flexDirection: 'row', padding: 8, gap: 8 }}>
+        {(['images', 'videos'] as const).map(tab => <TouchableOpacity key={tab} onPress={() => setKind(tab)} accessibilityRole="button"
+          style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, backgroundColor: kind === tab ? colors.primary : colors.surface }}>
+          <Text style={{ color: kind === tab ? colors.background : colors.text }}>{tab === 'images' ? `Images (${displayImages.length})` : `Videos (${displayVideos.length})`}</Text>
+        </TouchableOpacity>)}
       </View>
 
       {imageGenState.isGenerating && (
@@ -152,7 +170,10 @@ export const GalleryScreen: React.FC = () => {
         </View>
       )}
 
-      {displayImages.length === 0 ? (
+      {kind === 'videos' ? (displayVideos.length === 0 ? <View style={styles.emptyContainer}><Icon name="video" size={48} color={colors.textMuted} /><Text style={styles.emptyTitle}>No videos in this gallery</Text></View> :
+        <FlatList data={displayVideos} keyExtractor={item => item.id} contentContainerStyle={{ padding: 12 }}
+          renderItem={({ item }) => <TouchableOpacity onPress={() => setSelectedVideo(item)} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', padding: 16, marginBottom: 8, backgroundColor: colors.surface, borderRadius: 8, gap: 12 }}><Icon name="play-circle" size={28} color={colors.primary} /><View style={{ flex: 1 }}><Text numberOfLines={2} style={{ color: colors.text }}>{item.prompt}</Text><Text style={{ color: colors.textMuted }}>{item.durationSeconds.toFixed(1)} s · {item.width} × {item.height}</Text></View></TouchableOpacity>} />
+      ) : displayImages.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Icon name="image" size={48} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>
@@ -173,6 +194,34 @@ export const GalleryScreen: React.FC = () => {
         />
       )}
 
+      <Modal visible={!!selectedVideo} animationType="slide" onRequestClose={() => setSelectedVideo(null)}>
+        <SafeAreaView style={styles.container}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 16 }}>
+            <TouchableOpacity onPress={() => setSelectedVideo(null)}><Text style={{ color: colors.text }}>Close</Text></TouchableOpacity>
+            {selectedVideo ? <TouchableOpacity onPress={() => {
+              const source = resolveDocumentPath(selectedVideo.videoPath);
+              if (Platform.OS === 'ios') {
+                void Share.share({ url: `file://${source}` });
+              } else {
+                const destination = `${RNFS.DownloadDirectoryPath}/${selectedVideo.id}.mp4`;
+                void RNFS.copyFile(source, destination)
+                  .then(() => Alert.alert('Video saved', 'The video is in Downloads.'))
+                  .catch(() => Alert.alert('Save failed', 'The video could not be saved.'));
+              }
+            }}><Text style={{ color: colors.primary }}>{Platform.OS === 'ios' ? 'Share' : 'Save'}</Text></TouchableOpacity> : null}
+          </View>
+          {selectedVideo ? <>
+            <Video source={{ uri: `file://${resolveDocumentPath(selectedVideo.videoPath)}` }} controls paused resizeMode="contain" style={{ width: '100%', aspectRatio: selectedVideo.width / selectedVideo.height, backgroundColor: '#000' }} />
+            <Text style={{ color: colors.text, padding: 16 }}>{selectedVideo.prompt}</Text>
+            <TouchableOpacity onPress={() => {
+              const path = resolveDocumentPath(selectedVideo.videoPath);
+              removeVideo(selectedVideo.id);
+              void RNFS.unlink(path).catch(() => {});
+              setSelectedVideo(null);
+            }} style={{ padding: 16 }}><Text style={{ color: colors.error }}>Delete video</Text></TouchableOpacity>
+          </> : null}
+        </SafeAreaView>
+      </Modal>
       <FullscreenViewer
         image={selectedImage}
         showDetails={showDetails}
