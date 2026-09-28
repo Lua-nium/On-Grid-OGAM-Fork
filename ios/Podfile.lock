@@ -42,6 +42,8 @@ PODS:
   - MMKV (2.4.0):
     - MMKVCore (~> 2.4.0)
   - MMKVCore (2.4.0)
+  - OffgridVideo (0.1.0):
+    - React-Core
   - op-sqlite (15.2.5):
     - boost
     - DoubleConversion
@@ -3592,6 +3594,7 @@ DEPENDENCIES:
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - llama-rn (from `../node_modules/llama.rn`)
+  - OffgridVideo (from `../native/video`)
   - "op-sqlite (from `../node_modules/@op-engineering/op-sqlite`)"
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
@@ -3723,6 +3726,8 @@ EXTERNAL SOURCES:
     :tag: hermes-v0.14.0
   llama-rn:
     :path: "../node_modules/llama.rn"
+  OffgridVideo:
+    :path: "../native/video"
   op-sqlite:
     :path: "../node_modules/@op-engineering/op-sqlite"
   RCT-Folly:
@@ -3938,6 +3943,7 @@ SPEC CHECKSUMS:
   llama-rn: fc4d176920fff190ee3a5a4172ce739531150cc4
   MMKV: 86859fdfa2b0b21db1fd6e48788474a6416a2c77
   MMKVCore: 3d16ce9f7d411e135020915fde98a056859a1efa
+  OffgridVideo: 3a0d4acebd54e2ab315c9ff737aa017ccc3d36b8
   op-sqlite: bafff369cecaee4fe65c89eec47deaba26f2db95
   opencv-rne: 2305807573b6e29c8c87e3416ab096d09047a7a0
   RCT-Folly: 846fda9475e61ec7bcbf8a3fe81edfcaeb090669
@@ -4043,6 +4049,6 @@ SPEC CHECKSUMS:
   whisper-rn: 7566faf9b7d78e39ab9fc634cb90fdee81177793
   Yoga: 5456bb010373068fc92221140921b09d126b116e
 
-PODFILE CHECKSUM: d2e7563af7ca0531bcab79cceff20997d2fbe48c
+PODFILE CHECKSUM: d97d58b05041bdcebe2a6d7281b601cc8a2856c6
 
 COCOAPODS: 1.15.2
