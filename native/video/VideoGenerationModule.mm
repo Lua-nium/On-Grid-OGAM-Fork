@@ -89,7 +89,7 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
             NSError *encodingError = nil;
             if (!OGEncodeVideo(frames, count, fps, output, self->_runtime.cancelled, &encodingError))
               throw std::runtime_error(encodingError ? encodingError.localizedDescription.UTF8String : "Video encoding stopped.");
-          }, [&] { [self emitStage:@"conditioning" step:0 total:0]; });
+          }, [&](const char *) { [self emitStage:@"conditioning" step:0 total:0]; });
         } catch (const std::exception &error) {
           failure = [NSError errorWithDomain:@"OffgridVideo" code:1 userInfo:@{NSLocalizedDescriptionKey:@(error.what())}];
           [[NSFileManager defaultManager] removeItemAtPath:output error:nil];

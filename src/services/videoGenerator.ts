@@ -36,6 +36,7 @@ export const videoGenerator = {
         }
         onUpdate({
           stage: event.stage,
+          backend: event.backend ?? null,
           progress:
             event.total > 0 ? { step: event.step, total: event.total } : null,
         });

@@ -20,12 +20,27 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
     private external fun nativeGenerate(weight: String, vae: String, encoder: String, prompt: String, negative: String, width: Int, height: Int, frames: Int, fps: Int, steps: Int, guidance: Double, seed: Double, llm: String, embeddings: String, audioVae: String, flowShift: Double)
     private external fun nativeCancel()
     private external fun nativePrepare()
+    private external fun nativeSetRuntimeDirectory(path: String)
+    private fun prepareHexagonRuntime() {
+        val directory = File(context.filesDir, "video-hexagon").apply { mkdirs() }
+        val names = context.assets.list("video-hexagon") ?: emptyArray()
+        check(names.isNotEmpty()) { "The video NPU runtime is missing from this build." }
+        for (name in names) {
+            check(name.matches(Regex("liboffgrid-video-htp-v[0-9]+\\.so")))
+            val temporary = File(directory, "$name.tmp")
+            context.assets.open("video-hexagon/$name").use { input ->
+                temporary.outputStream().use { output -> input.copyTo(output) }
+            }
+            check(temporary.renameTo(File(directory, name))) { "Could not install the video NPU runtime." }
+        }
+        nativeSetRuntimeDirectory(directory.absolutePath)
+    }
     @ReactMethod fun addListener(name: String) {}
     @ReactMethod fun removeListeners(count: Int) {}
     private fun stop() { cancelled.set(true); nativeCancel() }
     @ReactMethod fun cancel(promise: Promise) { stop(); promise.resolve(null) }
     // Called synchronously by JNI while its worker owns the runtime.
-    fun conditioning() { emit("conditioning", 0, 0) }
+    fun conditioning(backend: String) { emit("conditioning", 0, 0, backend) }
     fun progress(step: Int, total: Int) {
         emit("generating", step, total)
     }
@@ -34,10 +49,10 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
         emit("encoding", 0, 0)
         checkNotNull(encoder).append(rgb, channels) { cancelled.get() }
     }
-    private fun emit(stage: String, step: Int, total: Int) {
+    private fun emit(stage: String, step: Int, total: Int, backend: String? = null) {
         if (!context.hasActiveReactInstance()) return
         context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit("VideoGenerationProgress", Arguments.createMap().apply { putString("stage", stage); putInt("step", step); putInt("total", total) })
+            .emit("VideoGenerationProgress", Arguments.createMap().apply { putString("stage", stage); putInt("step", step); putInt("total", total); if (backend != null) putString("backend", backend) })
     }
     @ReactMethod fun generate(input: ReadableMap, promise: Promise) {
         if (!busy.compareAndSet(false, true)) { promise.reject("VIDEO_BUSY", "Video generation is already running."); return }
@@ -45,6 +60,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
         executor.execute {
             var output: File? = null
             try {
+                prepareHexagonRuntime()
                 val destination = File(checkNotNull(input.getString("outputPath")))
                 output = destination
                 VideoGenerationService.admission = CompletableFuture()

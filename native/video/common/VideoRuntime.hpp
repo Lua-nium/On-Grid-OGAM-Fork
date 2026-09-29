@@ -3,6 +3,7 @@
 #include <OffgridVideoRuntime/stable-diffusion.h>
 #else
 #include "stable-diffusion.h"
+#include "ggml-backend.h"
 #endif
 #include <atomic>
 #include <limits>
@@ -35,7 +36,7 @@ public:
   void run(const VideoRequest &request,
            const std::function<void(int, int)> &progress,
            const std::function<void(sd_image_t *, int, int)> &encode,
-           const std::function<void()> &conditioning) {
+           const std::function<void(const char *)> &conditioning) {
     std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
     if (!execution.owns_lock()) throw std::runtime_error("Video generation is already running.");
     sd_image_t *frames = nullptr;
@@ -62,13 +63,53 @@ public:
       config.auto_fit = true;
       config.eager_load = false;
 #ifdef __ANDROID__
-      // Vulkan cannot execute every T5 operation on preallocated encoder
-      // tensors. Keep conditioning on CPU; diffusion still selects the GPU.
-      config.backend = "te=cpu";
-      config.params_backend = "te=cpu";
+      // Probe the NPU before choosing it. Devices without a usable Hexagon
+      // runtime retain Vulkan diffusion and the CPU conditioning fallback.
+      sd_list_devices(nullptr, 0);
+      std::string preferred;
+      for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        auto device = ggml_backend_dev_get(i);
+        const char *name = ggml_backend_dev_name(device);
+        if (std::string(name).rfind("HTP", 0) != 0) continue;
+        try {
+          auto probe = ggml_backend_dev_init(device, nullptr);
+          if (!probe) continue;
+          preferred = name;
+          ggml_backend_free(probe);
+          break;
+        } catch (const std::exception &) {
+          // An installed driver can still reject the DSP session.
+        }
+      }
+      config.backend = preferred.empty() ? "Vulkan0,te=cpu" : preferred.c_str();
+      // Let auto-fit stage weights between CPU and the accelerator. A fixed
+      // params backend disables auto-fit in sd.cpp. Keep DSP mappings below the
+      // v73 address-space limit and leave room for graph buffers.
+      config.max_vram = "HTP0=1.5";
+      config.disable_prefetch = true;
 #endif
       config.n_threads = 4;
-      auto loaded = new_sd_ctx(&config);
+      sd_ctx_t *loaded = nullptr;
+#ifdef __ANDROID__
+      try { loaded = new_sd_ctx(&config); }
+      catch (const std::exception &) {
+        if (preferred.empty() || cancelled.load()) throw;
+      }
+      if (!loaded && !preferred.empty() && !cancelled.load()) {
+        preferred.clear();
+        config.backend = "Vulkan0,te=cpu";
+        try { loaded = new_sd_ctx(&config); }
+        catch (const std::exception &) {
+          if (cancelled.load()) throw;
+        }
+      }
+      if (!loaded && !cancelled.load()) {
+        config.backend = "cpu";
+        loaded = new_sd_ctx(&config);
+      }
+#else
+      loaded = new_sd_ctx(&config);
+#endif
       {
         std::lock_guard<std::mutex> guard(contextMutex);
         context = loaded;
@@ -89,7 +130,11 @@ public:
       params.sample_params.sample_method = EULER_SAMPLE_METHOD;
       params.sample_params.scheduler = sd_get_default_scheduler(loaded, EULER_SAMPLE_METHOD);
       params.vae_tiling_params.enabled = true;
-      conditioning();
+#ifdef __ANDROID__
+      conditioning(preferred.empty() ? "cpu" : "npu");
+#else
+      conditioning("");
+#endif
       if (!generate_video(loaded, &params, &frames, &count, nullptr, &fps) || !frames || count == 0)
         throw std::runtime_error(cancelled.load() ? "Video generation stopped." : "The video engine produced no frames.");
       if (cancelled.load()) throw std::runtime_error("Video generation stopped.");

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { Platform, Text } from 'react-native';
+import { Text } from 'react-native';
 import { videoGenerationService } from '../services/videoGenerationService';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
@@ -34,7 +34,9 @@ export function VideoGenerationStatus({
       : state.stage === 'preparing'
       ? 'Loading video model'
       : state.stage === 'conditioning'
-      ? Platform.OS === 'android'
+      ? state.backend === 'npu'
+        ? 'Processing prompt (NPU preferred)'
+        : state.backend === 'cpu'
         ? 'Processing prompt on CPU'
         : 'Processing prompt'
       : state.stage === 'encoding'

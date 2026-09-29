@@ -39,6 +39,21 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
   runtime.cancelled.store(false);
 }
 extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeCancel(JNIEnv *, jobject) { runtime.cancel(); }
+extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeSetRuntimeDirectory(JNIEnv *env, jobject, jstring path) {
+  try {
+    auto directory = string(env, path);
+    const char *existing = getenv("ADSP_LIBRARY_PATH");
+    std::string search = directory + ";" + (existing ? existing : "/vendor/lib/rfsa/adsp;/vendor/dsp;/system/lib/rfsa/adsp;/dsp");
+    if (setenv("ADSP_LIBRARY_PATH", search.c_str(), 1) != 0 ||
+        setenv("OFFGRID_VIDEO_HTP_DIR", directory.c_str(), 1) != 0)
+      throw std::runtime_error("Could not configure the NPU runtime.");
+  } catch (const std::exception &error) {
+    if (!env->ExceptionCheck()) {
+      auto klass = env->FindClass("java/lang/IllegalStateException");
+      if (klass) { env->ThrowNew(klass, error.what()); env->DeleteLocalRef(klass); }
+    }
+  }
+}
 extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeGenerate(
   JNIEnv *env, jobject self, jstring weight, jstring vae, jstring encoder, jstring prompt, jstring negative,
   jint width, jint height, jint frames, jint fps, jint steps, jdouble guidance, jdouble seed, jstring llm, jstring embeddings, jstring audioVae, jdouble flowShift) {
@@ -55,7 +70,7 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
     if (!owner) throw std::runtime_error("Not enough memory to start video generation.");
     auto klass = env->GetObjectClass(self);
     auto progress = env->GetMethodID(klass, "progress", "(II)V");
-    auto conditioning = env->GetMethodID(klass, "conditioning", "()V");
+    auto conditioning = env->GetMethodID(klass, "conditioning", "(Ljava/lang/String;)V");
     auto frame = env->GetMethodID(klass, "frame", "([BIII)V");
     env->DeleteLocalRef(klass);
     if (!progress || !frame || !conditioning) throw std::runtime_error("Missing video host callbacks.");
@@ -87,8 +102,10 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
         env->DeleteLocalRef(bytes);
         if (env->ExceptionCheck()) throw std::runtime_error("Video encoder failed.");
       }
-    }, [&] {
-      env->CallVoidMethod(owner, conditioning);
+    }, [&](const char *backend) {
+      auto hardware = env->NewStringUTF(backend);
+      env->CallVoidMethod(owner, conditioning, hardware);
+      env->DeleteLocalRef(hardware);
       if (env->ExceptionCheck()) throw std::runtime_error("Could not report prompt processing.");
     });
   } catch (const std::exception &error) {
