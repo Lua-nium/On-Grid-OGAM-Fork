@@ -1,8 +1,11 @@
 package ai.offgridmobile.video
 
 import android.content.Intent
+import android.view.Window
+import android.view.WindowManager
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.*
+import com.facebook.react.common.LifecycleState
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.File
 import java.util.concurrent.Executors
@@ -10,13 +13,39 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-class VideoGenerationModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
+class VideoGenerationModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context), LifecycleEventListener {
     companion object { init { System.loadLibrary("offgrid_video") } }
     private val executor = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
     private val cancelled = AtomicBoolean(false)
+    private val videoScreenActive = AtomicBoolean(false)
+    private var awakeWindow: Window? = null
+    private var addedScreenFlag = false
     private var encoder: VideoEncoder? = null
     private var previewFile: File? = null
+    init { context.addLifecycleEventListener(this) }
+    private fun releaseScreenFlag() {
+        if (addedScreenFlag) awakeWindow?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        awakeWindow = null
+        addedScreenFlag = false
+    }
+    private fun updateScreenFlag() {
+        val window = if (videoScreenActive.get() && context.lifecycleState == LifecycleState.RESUMED) context.currentActivity?.window else null
+        if (window === awakeWindow) return
+        releaseScreenFlag()
+        if (window != null) {
+            awakeWindow = window
+            addedScreenFlag = window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON == 0
+            if (addedScreenFlag) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+    private fun keepVideoScreenAwake(active: Boolean) {
+        videoScreenActive.set(active)
+        UiThreadUtil.runOnUiThread { updateScreenFlag() }
+    }
+    override fun onHostResume() { updateScreenFlag() }
+    override fun onHostPause() { releaseScreenFlag() }
+    override fun onHostDestroy() { releaseScreenFlag() }
     override fun getName() = "VideoGenerationModule"
     private external fun nativeGenerate(weight: String, vae: String, encoder: String, prompt: String, negative: String, width: Int, height: Int, frames: Int, fps: Int, steps: Int, guidance: Double, seed: Double, llm: String, embeddings: String, audioVae: String, flowShift: Double)
     private external fun nativeCancel()
@@ -81,6 +110,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
         executor.execute {
             var output: File? = null
             try {
+                keepVideoScreenAwake(true)
                 prepareHexagonRuntime()
                 val destination = File(checkNotNull(input.getString("outputPath")))
                 output = destination
@@ -107,6 +137,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
             } catch (error: Throwable) {
                 output?.delete(); promise.reject(if (cancelled.get()) "VIDEO_CANCELLED" else "VIDEO_FAILED", error.message, error)
             } finally {
+                keepVideoScreenAwake(false)
                 encoder = null; previewFile = null; VideoGenerationService.cancel = null
                 context.stopService(Intent(context, VideoGenerationService::class.java)); busy.set(false)
             }
@@ -167,5 +198,9 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
             finally { VideoGenerationService.cancel = null; context.stopService(Intent(context, VideoGenerationService::class.java)); busy.set(false) }
         }
     }
-    override fun invalidate() { stop(); executor.shutdown(); super.invalidate() }
+    override fun invalidate() {
+        keepVideoScreenAwake(false)
+        context.removeLifecycleEventListener(this)
+        stop(); executor.shutdown(); super.invalidate()
+    }
 }
