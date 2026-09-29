@@ -62,10 +62,18 @@ class VideoRuntime {
           // An installed driver can still reject the DSP session.
         }
       }
-      // Convolution-heavy decoders cannot execute their main operations on
-      // Hexagon. Keep them on the GPU to avoid repeated GPU/NPU copies.
-      const std::string npuBackend = preferred + (ggml_backend_dev_by_name("Vulkan0") ? ",vae=Vulkan0" : ",vae=cpu");
-      config.backend = preferred.empty() ? "Vulkan0,te=cpu" : npuBackend.c_str();
+      // Wan decode still loses the Adreno device between spatial tiles after
+      // the matvec compiler workaround. Keep HTP diffusion/conditioning, but
+      // route this decoder to CPU before it can invalidate the GPU context.
+      const auto gpuDevice = ggml_backend_dev_by_name("Vulkan0");
+      const std::string gpuDescription = gpuDevice ? ggml_backend_dev_description(gpuDevice) : "";
+      const std::string vaeName = request.vae.substr(request.vae.find_last_of("/\\") + 1);
+      const bool wanVae = vaeName == "wan_2.1_vae.safetensors" || vaeName == "wan2.2_vae.safetensors";
+      const bool adrenoWan = wanVae && gpuDescription.find("Adreno") != std::string::npos;
+      const std::string vaeBackend = gpuDevice && !adrenoWan ? ",vae=Vulkan0" : ",vae=cpu";
+      const std::string npuBackend = preferred + vaeBackend;
+      const std::string gpuBackend = "Vulkan0,te=cpu" + vaeBackend;
+      config.backend = preferred.empty() ? gpuBackend.c_str() : npuBackend.c_str();
       // Stream NPU weights from disk per graph segment. Keeping a second
       // complete copy on Vulkan retains the text encoder during diffusion and
       // can trigger Android's low-memory killer. The graph cap still controls
@@ -94,7 +102,7 @@ class VideoRuntime {
         preferred.clear();
         config.params_backend = nullptr;
         config.auto_fit = true;
-        config.backend = "Vulkan0,te=cpu";
+        config.backend = gpuBackend.c_str();
         try { loaded = new_sd_ctx(&config); }
         catch (const std::exception &) {
           if (cancelled.load()) throw;
