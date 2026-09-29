@@ -16,7 +16,7 @@ PATCH="$ROOT/scripts/video/android-vulkan-dispatch.patch"
 if ! git -C "$SOURCE/ggml" apply --reverse --check "$PATCH" 2>/dev/null; then
   git -C "$SOURCE/ggml" apply "$PATCH"
 fi
-for entry in "ggml:android-vulkan-device-fault.patch" "ggml:android-hexagon.patch" "ggml:android-hexagon-buffer-validation.patch" ".:android-hardware-fallback.patch" ".:conditioning-errors.patch"; do
+for entry in "ggml:android-vulkan-device-fault.patch" "ggml:android-vulkan-pipeline-diagnostics.patch" "ggml:android-hexagon.patch" "ggml:android-hexagon-buffer-validation.patch" ".:android-hardware-fallback.patch" ".:conditioning-errors.patch"; do
   target="${entry%%:*}"
   patch="$ROOT/scripts/video/${entry#*:}"
   if ! git -C "$SOURCE/$target" apply --reverse --check "$patch" 2>/dev/null; then
