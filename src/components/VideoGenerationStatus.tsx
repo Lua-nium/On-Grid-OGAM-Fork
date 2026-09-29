@@ -30,7 +30,9 @@ export function VideoGenerationStatus({
   const samplingFinished =
     state.progress && state.progress.step >= state.progress.total;
   const label =
-    state.stage === 'enhancing'
+    state.error
+      ? `${state.error} Waiting for the video engine to stop.`
+      : state.stage === 'enhancing'
       ? 'Preparing prompt'
       : state.stage === 'preparing'
       ? 'Loading video model'
@@ -46,7 +48,7 @@ export function VideoGenerationStatus({
       ? 'Decoding video frames'
       : 'Generating video';
   const steps =
-    state.stage === 'generating' && state.progress && !samplingFinished
+    !state.error && state.stage === 'generating' && state.progress && !samplingFinished
       ? ` · Step ${state.progress.step} of ${state.progress.total}`
       : state.stage === 'decoding' && state.progress
       ? ` · Section ${state.progress.step} of ${state.progress.total} complete`

@@ -1,3 +1,4 @@
+import logger from '../utils/logger';
 import { NativeEventEmitter, NativeModules } from 'react-native';
 import { videoArchitecture } from '@offgrid/models';
 import type {
@@ -16,6 +17,7 @@ export const videoGenerator = {
     pack: VideoModelPack,
     outputPath: string,
     onUpdate: (update: VideoGenerationUpdateContract) => void,
+    onInterrupted?: (reason: string) => void,
   ): Promise<string> {
     if (!native)
       throw new Error('This build does not include the video engine.');
@@ -24,6 +26,15 @@ export const videoGenerator = {
     const listener = new NativeEventEmitter(native).addListener(
       'VideoGenerationProgress',
       event => {
+        if (typeof event.lifecycle === 'string') {
+          logger.log('[VideoLifecycle]', event.at, event.lifecycle);
+          return;
+        }
+        if (typeof event.interruption === 'string') {
+          logger.warn('[VideoLifecycle] interrupted', event.interruption);
+          onInterrupted?.(event.interruption);
+          return;
+        }
         // sd.cpp also sends tensor-loading and VAE tile counters through this
         // callback. Only sampling steps belong in the generation step count.
         if (event.stage === 'generating') {

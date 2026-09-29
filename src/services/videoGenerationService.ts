@@ -413,8 +413,10 @@ class VideoGenerationService {
           },
         );
         if (this.cancelled) throw new Error('Video generation stopped.');
-        path = await videoGenerator.generate(request, pack, output, update =>
-          this.update(update),
+        path = await videoGenerator.generate(
+          request, pack, output,
+          update => this.update(update),
+          reason => this.update({ error: reason, progress: null, preview: null }),
         );
       }
       if (this.cancelled) throw new Error('Video generation stopped.');
