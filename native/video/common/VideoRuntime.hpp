@@ -34,7 +34,8 @@ public:
   }
   void run(const VideoRequest &request,
            const std::function<void(int, int)> &progress,
-           const std::function<void(sd_image_t *, int, int)> &encode) {
+           const std::function<void(sd_image_t *, int, int)> &encode,
+           const std::function<void()> &conditioning) {
     std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
     if (!execution.owns_lock()) throw std::runtime_error("Video generation is already running.");
     sd_image_t *frames = nullptr;
@@ -88,6 +89,7 @@ public:
       params.sample_params.sample_method = EULER_SAMPLE_METHOD;
       params.sample_params.scheduler = sd_get_default_scheduler(loaded, EULER_SAMPLE_METHOD);
       params.vae_tiling_params.enabled = true;
+      conditioning();
       if (!generate_video(loaded, &params, &frames, &count, nullptr, &fps) || !frames || count == 0)
         throw std::runtime_error(cancelled.load() ? "Video generation stopped." : "The video engine produced no frames.");
       if (cancelled.load()) throw std::runtime_error("Video generation stopped.");

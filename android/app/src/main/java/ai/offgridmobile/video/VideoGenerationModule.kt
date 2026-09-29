@@ -25,6 +25,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
     private fun stop() { cancelled.set(true); nativeCancel() }
     @ReactMethod fun cancel(promise: Promise) { stop(); promise.resolve(null) }
     // Called synchronously by JNI while its worker owns the runtime.
+    fun conditioning() { emit("conditioning", 0, 0) }
     fun progress(step: Int, total: Int) {
         emit("generating", step, total)
     }

@@ -1,5 +1,5 @@
-import React, { useSyncExternalStore } from 'react';
-import { Text } from 'react-native';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import { Platform, Text } from 'react-native';
 import { videoGenerationService } from '../services/videoGenerationService';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
@@ -15,6 +15,15 @@ export function VideoGenerationStatus({
     videoGenerationService.getState,
   );
   const { colors } = useTheme();
+  const [now, setNow] = useState(Date.now);
+  const running =
+    state.phase === 'running' && state.conversationId === conversationId;
+  useEffect(() => {
+    if (!running) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [running, state.startedAt]);
   if (state.phase !== 'running' || state.conversationId !== conversationId)
     return null;
   const samplingFinished =
@@ -24,6 +33,10 @@ export function VideoGenerationStatus({
       ? 'Preparing prompt'
       : state.stage === 'preparing'
       ? 'Loading video model'
+      : state.stage === 'conditioning'
+      ? Platform.OS === 'android'
+        ? 'Processing prompt on CPU'
+        : 'Processing prompt'
       : state.stage === 'encoding'
       ? 'Saving video'
       : samplingFinished
@@ -33,9 +46,15 @@ export function VideoGenerationStatus({
     state.stage === 'generating' && state.progress && !samplingFinished
       ? ` · Step ${state.progress.step} of ${state.progress.total}`
       : '';
+  const seconds = Math.max(
+    0,
+    Math.floor((now - (state.startedAt ?? now)) / 1000),
+  );
+  const elapsed = `${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed`;
   return (
     <Text
       accessibilityLiveRegion="polite"
+      accessibilityLabel={`${label}${steps}`}
       style={{
         ...TYPOGRAPHY.bodySmall,
         color: colors.textSecondary,
@@ -45,6 +64,7 @@ export function VideoGenerationStatus({
     >
       {label}
       {steps}
+      {` · ${elapsed}`}
     </Text>
   );
 }

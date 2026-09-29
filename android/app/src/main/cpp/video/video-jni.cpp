@@ -55,9 +55,10 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
     if (!owner) throw std::runtime_error("Not enough memory to start video generation.");
     auto klass = env->GetObjectClass(self);
     auto progress = env->GetMethodID(klass, "progress", "(II)V");
+    auto conditioning = env->GetMethodID(klass, "conditioning", "()V");
     auto frame = env->GetMethodID(klass, "frame", "([BIII)V");
     env->DeleteLocalRef(klass);
-    if (!progress || !frame) throw std::runtime_error("Missing video host callbacks.");
+    if (!progress || !frame || !conditioning) throw std::runtime_error("Missing video host callbacks.");
     std::atomic_bool callbackFailed{false};
     runtime.run(request, [&](int step, int total) {
       // The engine may report progress from a worker thread. JNI environments
@@ -86,6 +87,9 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
         env->DeleteLocalRef(bytes);
         if (env->ExceptionCheck()) throw std::runtime_error("Video encoder failed.");
       }
+    }, [&] {
+      env->CallVoidMethod(owner, conditioning);
+      if (env->ExceptionCheck()) throw std::runtime_error("Could not report prompt processing.");
     });
   } catch (const std::exception &error) {
     if (!env->ExceptionCheck()) {
