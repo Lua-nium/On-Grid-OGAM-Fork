@@ -15,21 +15,6 @@ export function VideoGenerationStatus({
   );
   const { colors } = useTheme();
   if (conversationId && state.conversationId !== conversationId) return null;
-  if (state.phase === 'failed')
-    return (
-      <Card title="Video generation stopped">
-        <Text accessibilityRole="alert" style={{ color: colors.error }}>
-          {state.error}
-        </Text>
-        <Button
-          title="Retry"
-          variant="secondary"
-          onPress={() => {
-            void videoGenerationService.retry().catch(() => {});
-          }}
-        />
-      </Card>
-    );
   if (state.phase !== 'running') return null;
   return (
     <Card

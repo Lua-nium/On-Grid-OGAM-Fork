@@ -20,6 +20,9 @@ import { useAppStore, useChatStore } from '../stores';
 import { videoGenerator } from './videoGenerator';
 import { resolveVideoPack } from './videoModelFiles';
 import { modelResidencyManager } from './modelResidency';
+import { OverridableMemoryError } from './modelLoadErrors';
+import { reportModelFailure, clearModelFailure } from './modelFailureHandler';
+import { reasonFromLoadError } from './modelFailureReasons';
 import { generationSession } from './generationSession';
 import type { GeneratedVideo } from '../types';
 
@@ -106,6 +109,7 @@ class VideoGenerationService {
       startedAt: saved.startedAt,
       finishedAt: Date.now(),
     });
+    this.reportFailure(new Error(this.state.error!), !!saved.remoteServerId);
   }
   private publishResult(
     result: GeneratedVideo,
@@ -154,7 +158,22 @@ class VideoGenerationService {
     useChatStore.getState().removeMediaAttachment(id);
     useAppStore.getState().removeGeneratedVideo(id);
   }
-  async retry(): Promise<GeneratedVideo | undefined> {
+  private reportFailure(error: unknown, remote = false) {
+    reportModelFailure('video', error, {
+      remote,
+      onRetry: () => {
+        void (async () => {
+          if (!remote && reasonFromLoadError(error) === 'insufficient-memory')
+            await activeModelService.ejectAll();
+          await this.retry();
+        })().catch(() => {});
+      },
+      onLoadAnyway: () => {
+        void this.retry({ override: true }).catch(() => {});
+      },
+    });
+  }
+  async retry(options?: { override?: boolean }): Promise<GeneratedVideo | undefined> {
     if (!this.journal) return;
     if (this.completion)
       throw new Error('Video generation is already running.');
@@ -162,7 +181,7 @@ class VideoGenerationService {
       throw new Error(
         'Wait for the current generation to finish before retrying.',
       );
-    this.completion = this.run(this.journal.input, this.journal).finally(() => {
+    this.completion = this.run(this.journal.input, this.journal, options).finally(() => {
       this.completion = null;
     });
     return this.completion;
@@ -226,6 +245,7 @@ class VideoGenerationService {
   private async run(
     input: VideoInput,
     resumed?: VideoJournal,
+    options?: { override?: boolean },
   ): Promise<GeneratedVideo | undefined> {
     const app = useAppStore.getState();
     const model = app.downloadedVideoModels.find(
@@ -256,6 +276,7 @@ class VideoGenerationService {
       messageId = resumed?.messageId ?? uuid();
     const directory = `${RNFS.DocumentDirectoryPath}/generated-videos`,
       output = `${directory}/${id}.mp4`;
+    clearModelFailure('video');
     this.cancelled = false;
     this.abort = new AbortController();
     this.messageId = messageId;
@@ -364,14 +385,14 @@ class VideoGenerationService {
               dirtyMemory: true,
               canEvict: () => false,
             };
-            const fit = await modelResidencyManager.makeRoomFor(spec);
+            const fit = await modelResidencyManager.makeRoomFor(spec, options);
             if (!fit.fits)
-              throw new Error(
+              throw new OverridableMemoryError(
                 'Not enough available memory for this video model and clip size.',
               );
             if (this.cancelled) throw new Error('Video generation stopped.');
             registration = modelResidencyManager.register(spec, () =>
-              videoGenerator.cancel(),
+              this.cancelGeneration(),
             );
           },
         );
@@ -430,7 +451,10 @@ class VideoGenerationService {
           error instanceof Error ? error.message : 'Video generation failed.',
         finishedAt: Date.now(),
       });
-      if (!this.cancelled) throw error;
+      if (!this.cancelled) {
+        this.reportFailure(error, !!server);
+        throw error;
+      }
     } finally {
       if (registration) modelResidencyManager.unregister('video', registration);
       if (generationSession.isGeneratingFor(input.conversationId))
