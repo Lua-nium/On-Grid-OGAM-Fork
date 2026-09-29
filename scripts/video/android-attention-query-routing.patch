@@ -30,7 +30,7 @@
      ggml_backend_t current = runtime_backend;
      const int n_nodes      = ggml_graph_n_nodes(gf);
      for (int i = 0; i < n_nodes; i++) {
-@@ -230,6 +253,20 @@
+@@ -230,6 +253,28 @@
              node->op == GGML_OP_PERMUTE || node->op == GGML_OP_TRANSPOSE) {
              continue;
          }
@@ -44,6 +44,14 @@
 +            ++attention_nodes_pinned;
 +            if (is_query_chunk(node) && ggml_backend_supports_op(attention_backend, node->src[0])) {
 +                ggml_backend_sched_set_tensor_backend(sched, node->src[0], attention_backend);
++                // Query views share this full-Q contiguous producer. Keep it
++                // on GPU too, so the scheduler does not recopy it for each view.
++                auto query_view = node->src[0]->src[0];
++                auto query_storage = query_view ? query_view->view_src : nullptr;
++                if (query_storage && query_storage->op == GGML_OP_CONT &&
++                    ggml_backend_supports_op(attention_backend, query_storage)) {
++                    ggml_backend_sched_set_tensor_backend(sched, query_storage, attention_backend);
++                }
 +            }
 +            continue;
 +        }
@@ -51,7 +59,7 @@
          // In-place operations must follow the device chosen for their source.
          // Its buffer may not exist yet when this graph is assigned.
          if (node->view_src != nullptr) continue;
-@@ -239,6 +276,9 @@
+@@ -239,6 +284,9 @@
              ggml_backend_sched_set_tensor_backend(sched, node, current);
          }
      }

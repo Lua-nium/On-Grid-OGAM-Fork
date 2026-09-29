@@ -1,6 +1,6 @@
 --- a/src/core/ggml_extend.cpp
 +++ b/src/core/ggml_extend.cpp
-@@ -721,6 +721,43 @@
+@@ -721,6 +721,46 @@
              mask_in = ggml_cast(ctx, mask_in, GGML_TYPE_F16);
          }
  
@@ -22,6 +22,9 @@
 +            }
 +        }
 +        if (mask_in == nullptr && adreno_attention && q_in->ne[1] > 128) {
++            // One owned full-Q buffer lets all query views stay on the GPU.
++            // RoPE may otherwise leave Q aliased to an in-place HTP result.
++            q_in = ggml_cont(ctx, q_in);
 +            const int64_t work_per_query = 2 * k_in->ne[1] *
 +                (q_in->ne[0] + v_in->ne[0]) * q_in->ne[2] * q_in->ne[3];
 +            const int64_t chunk_rows = std::max<int64_t>(8, std::min<int64_t>(128,
