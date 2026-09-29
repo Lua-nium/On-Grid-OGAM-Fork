@@ -72,8 +72,10 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
     auto progress = env->GetMethodID(klass, "progress", "(II)V");
     auto conditioning = env->GetMethodID(klass, "conditioning", "(Ljava/lang/String;)V");
     auto frame = env->GetMethodID(klass, "frame", "([BIII)V");
+    auto decodeProgress = env->GetMethodID(klass, "decoding", "(II)V");
+    auto preview = env->GetMethodID(klass, "preview", "([BII)V");
     env->DeleteLocalRef(klass);
-    if (!progress || !frame || !conditioning) throw std::runtime_error("Missing video host callbacks.");
+    if (!progress || !frame || !conditioning || !decodeProgress || !preview) throw std::runtime_error("Missing video host callbacks.");
     std::atomic_bool callbackFailed{false};
     runtime.run(request, [&](int step, int total) {
       // The engine may report progress from a worker thread. JNI environments
@@ -107,6 +109,24 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
       env->CallVoidMethod(owner, conditioning, hardware);
       env->DeleteLocalRef(hardware);
       if (env->ExceptionCheck()) throw std::runtime_error("Could not report prompt processing.");
+    }, [&](int completed, int total) {
+      AttachedEnv thread(vm);
+      if (!thread.env) return;
+      thread.env->CallVoidMethod(owner, decodeProgress, completed, total);
+      if (thread.env->ExceptionCheck()) thread.env->ExceptionClear();
+    }, [&](const sd_image_t &image) {
+      // A preview is optional. Its failure must not discard a completed decode.
+      const uint64_t size = uint64_t(image.width) * image.height * image.channel;
+      if (!image.data || image.channel != 3 || size > uint64_t(std::numeric_limits<jsize>::max())) return;
+      AttachedEnv thread(vm);
+      if (!thread.env || runtime.cancelled.load()) return;
+      auto bytes = thread.env->NewByteArray(static_cast<jsize>(size));
+      if (bytes) {
+        thread.env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(size), reinterpret_cast<jbyte *>(image.data));
+        if (!thread.env->ExceptionCheck()) thread.env->CallVoidMethod(owner, preview, bytes, image.width, image.height);
+        thread.env->DeleteLocalRef(bytes);
+      }
+      if (thread.env->ExceptionCheck()) thread.env->ExceptionClear();
     });
   } catch (const std::exception &error) {
     if (!env->ExceptionCheck()) {

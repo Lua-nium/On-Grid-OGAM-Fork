@@ -190,13 +190,20 @@ public:
   void run(const VideoRequest &request,
            const std::function<void(int, int)> &progress,
            const std::function<void(sd_image_t *, int, int)> &encode,
-           const std::function<void(const char *)> &conditioning) {
+           const std::function<void(const char *)> &conditioning,
+           const std::function<void(int, int)> &decodeProgress,
+           const std::function<void(const sd_image_t &)> &preview) {
     std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
     if (!execution.owns_lock()) throw std::runtime_error("Video generation is already running.");
     sd_image_t *frames = nullptr;
     int count = 0, fps = request.fps;
+    struct DecodeObserver {
+      const std::function<void(int, int)> &progress;
+      const std::function<void(const sd_image_t &)> &frame;
+    } observer{decodeProgress, preview};
     auto cleanup = [&] {
       if (frames) free_sd_images(frames, count);
+      sd_set_video_decode_callback(nullptr, nullptr, nullptr);
       sd_set_progress_callback(nullptr, nullptr);
       std::lock_guard<std::mutex> guard(contextMutex);
       if (context) free_sd_ctx(context);
@@ -215,6 +222,12 @@ public:
       sd_set_progress_callback([](int step, int total, float, void *data) {
         (*static_cast<const std::function<void(int, int)> *>(data))(step, total);
       }, const_cast<void *>(static_cast<const void *>(&progress)));
+      sd_set_video_decode_callback([](int completed, int total, void *data) {
+        static_cast<DecodeObserver *>(data)->progress(completed, total);
+      }, [](const sd_image_t *image, void *data) {
+        try { static_cast<DecodeObserver *>(data)->frame(*image); }
+        catch (...) { /* The optional preview must not fail generation. */ }
+      }, &observer);
       sd_vid_gen_params_t params;
       sd_vid_gen_params_init(&params);
       params.prompt = request.prompt.c_str(); params.negative_prompt = request.negative.c_str();

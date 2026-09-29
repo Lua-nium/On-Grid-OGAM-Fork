@@ -5,6 +5,18 @@
 #import "VideoEncoder.h"
 #include "common/VideoRuntime.hpp"
 
+static BOOL OGSaveRgbPng(const sd_image_t &image, NSString *output) {
+  if (!image.data || image.channel != 3) return NO;
+  CFDataRef data = CFDataCreate(kCFAllocatorDefault, image.data, image.width * image.height * 3);
+  CGDataProviderRef provider = data ? CGDataProviderCreateWithCFData(data) : nullptr;
+  CGColorSpaceRef color = CGColorSpaceCreateDeviceRGB();
+  CGImageRef bitmap = provider ? CGImageCreate(image.width, image.height, 8, 24, image.width * 3, color, kCGImageAlphaNone, provider, nullptr, false, kCGRenderingIntentDefault) : nullptr;
+  NSData *png = bitmap ? UIImagePNGRepresentation([UIImage imageWithCGImage:bitmap]) : nil;
+  if (bitmap) CGImageRelease(bitmap);
+  CGColorSpaceRelease(color); if (provider) CGDataProviderRelease(provider); if (data) CFRelease(data);
+  return png && [png writeToFile:output atomically:YES];
+}
+
 @interface VideoGenerationModule : RCTEventEmitter <RCTBridgeModule>
 @end
 @implementation VideoGenerationModule {
@@ -90,11 +102,27 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
           self->_runtime.run(request, [&](int step, int total) {
             [self emitStage:@"generating" step:step total:total];
           }, [&](sd_image_t *frames, int count, int fps) {
-            [self emitStage:@"encoding" step:count total:count];
+            [self emitStage:@"encoding" step:0 total:count];
             NSError *encodingError = nil;
             if (!OGEncodeVideo(frames, count, fps, output, self->_runtime.cancelled, &encodingError))
               throw std::runtime_error(encodingError ? encodingError.localizedDescription.UTF8String : "Video encoding stopped.");
-          }, [&](const char *) { [self emitStage:@"conditioning" step:0 total:0]; });
+          }, [&](const char *) { [self emitStage:@"conditioning" step:0 total:0]; },
+          [&](int completed, int total) { [self emitStage:@"decoding" step:completed total:total]; },
+          [&](const sd_image_t &image) {
+            if (self->_runtime.cancelled.load()) return;
+            NSString *path = [output stringByAppendingString:@".preview.png"];
+            @try {
+              if (!OGSaveRgbPng(image, path)) return;
+            } @catch (NSException *exception) {
+              [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+              return;
+            }
+            NSDictionary *preview = @{@"path":path, @"width":@(image.width), @"height":@(image.height)};
+            dispatch_async(dispatch_get_main_queue(), ^{
+              if (self->_listeners) [self sendEventWithName:@"VideoGenerationProgress"
+                  body:@{@"stage":@"encoding", @"step":@0, @"total":@0, @"preview":preview}];
+            });
+          });
         } catch (const std::exception &error) {
           failure = [NSError errorWithDomain:@"OffgridVideo" code:1 userInfo:@{NSLocalizedDescriptionKey:@(error.what())}];
           [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
@@ -172,14 +200,7 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
           }, [&](const sd_image_t &image) {
             if (!image.data || image.channel != 3 || image.width != request.width || image.height != request.height)
               throw std::runtime_error("The image engine returned invalid pixels.");
-            CFDataRef data = CFDataCreate(kCFAllocatorDefault, image.data, image.width * image.height * 3);
-            CGDataProviderRef provider = data ? CGDataProviderCreateWithCFData(data) : nullptr;
-            CGColorSpaceRef color = CGColorSpaceCreateDeviceRGB();
-            CGImageRef bitmap = provider ? CGImageCreate(image.width, image.height, 8, 24, image.width * 3, color, kCGImageAlphaNone, provider, nullptr, false, kCGRenderingIntentDefault) : nullptr;
-            NSData *png = bitmap ? UIImagePNGRepresentation([UIImage imageWithCGImage:bitmap]) : nil;
-            if (bitmap) CGImageRelease(bitmap);
-            CGColorSpaceRelease(color); if (provider) CGDataProviderRelease(provider); if (data) CFRelease(data);
-            if (!png || ![png writeToFile:output atomically:YES]) throw std::runtime_error("Could not save the image.");
+            if (!OGSaveRgbPng(image, output)) throw std::runtime_error("Could not save the image.");
           });
           if (self->_runtime.cancelled.load()) throw std::runtime_error("Image generation stopped.");
         } catch (const std::exception &error) {
