@@ -17,6 +17,7 @@
  * coreml (iOS) uses a different layout validated elsewhere, so it's not checked here.
  */
 import RNFS from 'react-native-fs';
+import { statFile } from './fileStat';
 import { getSDImageModels } from '../services/huggingFaceModelBrowser';
 import { unzip } from 'react-native-zip-archive';
 import { ImageModelIncompleteError } from './modelLoadErrors';
@@ -187,3 +188,21 @@ export async function ensureImageExtractionComplete(opts: {
     throw new ImageModelIncompleteError(result.missing);
   }
 }
+
+/** Check all parts before registration. Pinned packs also supply a content hash;
+ * legacy descriptors retain their non-empty check because their sizes can drift. */
+export async function validateMultifileComplete(
+  modelDir: string,
+  files: { relativePath: string; sha256?: string }[],
+): Promise<void> {
+  if (files.length === 0) throw new Error('Download file list missing. Please retry.');
+  for (const file of files) {
+    const filePath = `${modelDir}/${file.relativePath}`;
+    const size = (await statFile(filePath))?.size ?? -1;
+    if (size <= 0) throw new Error(`Downloaded file missing or empty: ${file.relativePath} — tap retry`);
+    if (file.sha256 && (await RNFS.hash(filePath, 'sha256')).toLowerCase() !== file.sha256.toLowerCase()) {
+      throw new Error(`Downloaded file is damaged: ${file.relativePath} — tap retry`);
+    }
+  }
+}
+

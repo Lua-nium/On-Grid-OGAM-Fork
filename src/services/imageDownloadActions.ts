@@ -13,7 +13,8 @@ import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { makeImageModelKey } from '../utils/modelKey';
 import { ImageModelDescriptor, ImageDownloadDeps } from './imageModelDownloadTypes';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
-import { ensureImageExtractionComplete } from '../utils/imageModelIntegrity';
+import { ensureImageExtractionComplete, validateMultifileComplete } from '../utils/imageModelIntegrity';
+export { validateMultifileComplete } from '../utils/imageModelIntegrity';
 import logger from '../utils/logger';
 
 // ImageDownloadDeps now lives in ./types (so imageDownloadQnn can import it without cycling back
@@ -209,23 +210,6 @@ async function downloadSequentialFiles(opts: {
     assertNotCancelled(modelInfo.id, runtime);
     downloadedSize += file.size;
     useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
-  }
-}
-
-/** Check all parts before registration. Pinned packs also supply a content hash;
- * legacy descriptors retain their non-empty check because their sizes can drift. */
-export async function validateMultifileComplete(
-  modelDir: string,
-  files: { relativePath: string; sha256?: string }[],
-): Promise<void> {
-  if (files.length === 0) throw new Error('Download file list missing. Please retry.');
-  for (const file of files) {
-    const filePath = `${modelDir}/${file.relativePath}`;
-    const size = (await statFile(filePath))?.size ?? -1;
-    if (size <= 0) throw new Error(`Downloaded file missing or empty: ${file.relativePath} — tap retry`);
-    if (file.sha256 && (await RNFS.hash(filePath, 'sha256')).toLowerCase() !== file.sha256.toLowerCase()) {
-      throw new Error(`Downloaded file is damaged: ${file.relativePath} — tap retry`);
-    }
   }
 }
 

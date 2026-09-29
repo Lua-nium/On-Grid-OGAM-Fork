@@ -6,7 +6,7 @@ import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../typ
 import { loadDownloadedModels, saveModelsList } from './storage';
 import { basenameOf } from './reconcileStoredPaths';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
-import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
+import { ensureImageExtractionComplete, validateMultifileComplete } from '../../utils/imageModelIntegrity';
 // Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
 import { isMMProjFile, pickMmProjForModel } from '../mmproj';
 
@@ -246,6 +246,24 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
         const newModel = await buildRecoveredImageModel(item, detectBackend(item.name));
         await addImageModel(newModel);
         recovered.push(newModel);
+        continue;
+      }
+
+      // A complete SD pack can survive a stop between its last file and _ready.
+      // Keep partial known packs so the normal download can reuse valid parts.
+      const sdPack = getSDImageModels().find(model => model.id === item.name);
+      if (sdPack?.huggingFaceFiles) {
+        try {
+          await validateMultifileComplete(item.path, sdPack.huggingFaceFiles.map(file => ({
+            relativePath: file.path, sha256: file.sha256,
+          })));
+          await RNFS.writeFile(readyPath, '', 'utf8');
+          const model = await buildRecoveredImageModel(item, 'sd');
+          await addImageModel(model);
+          recovered.push(model);
+        } catch {
+          // Incomplete or damaged parts stay unregistered until Download repairs them.
+        }
         continue;
       }
 
