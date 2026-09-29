@@ -16,7 +16,14 @@ PATCH="$ROOT/scripts/video/android-vulkan-dispatch.patch"
 if ! git -C "$SOURCE/ggml" apply --reverse --check "$PATCH" 2>/dev/null; then
   git -C "$SOURCE/ggml" apply "$PATCH"
 fi
-for entry in "ggml:android-vulkan-device-fault.patch" "ggml:android-vulkan-pipeline-diagnostics.patch" "ggml:android-vulkan-matvec-fallback.patch" "ggml:android-vulkan-attention-fallback.patch" "ggml:android-hexagon.patch" "ggml:android-hexagon-buffer-validation.patch" "ggml:android-hexagon-precision.patch" ".:android-hardware-fallback.patch" ".:conditioning-errors.patch" ".:android-attention-buffer-ownership.patch" ".:android-attention-query-chunks.patch" ".:video-decode-observer.patch"; do
+# This overlay extends the scheduler inserted by android-hardware-fallback.patch.
+# Remove it before checking the base patch, then apply it again in order below.
+# Do not reset the source tree: other platform patches must remain intact.
+ROUTING_PATCH="$ROOT/scripts/video/android-attention-query-routing.patch"
+if git -C "$SOURCE" apply --reverse --check "$ROUTING_PATCH" 2>/dev/null; then
+  git -C "$SOURCE" apply --reverse "$ROUTING_PATCH"
+fi
+for entry in "ggml:android-vulkan-device-fault.patch" "ggml:android-vulkan-pipeline-diagnostics.patch" "ggml:android-vulkan-matvec-fallback.patch" "ggml:android-vulkan-attention-fallback.patch" "ggml:android-hexagon.patch" "ggml:android-hexagon-buffer-validation.patch" "ggml:android-hexagon-precision.patch" ".:android-hardware-fallback.patch" ".:conditioning-errors.patch" ".:android-attention-buffer-ownership.patch" ".:android-attention-query-chunks.patch" ".:android-attention-query-routing.patch" ".:video-decode-observer.patch"; do
   target="${entry%%:*}"
   patch="$ROOT/scripts/video/${entry#*:}"
   if ! git -C "$SOURCE/$target" apply --reverse --check "$patch" 2>/dev/null; then
