@@ -7,8 +7,43 @@ import type {
   VideoGenerationUpdateContract,
 } from '@offgrid/models';
 const native = NativeModules.VideoGenerationModule;
+type NativeVideoStatus = {
+  path: string;
+  phase: 'running' | 'succeeded' | 'failed';
+  stage: VideoGenerationUpdateContract['stage'];
+  step: number;
+  total: number;
+  backend?: VideoGenerationUpdateContract['backend'];
+  preview?: VideoGenerationUpdateContract['preview'];
+  code?: string;
+  error?: string;
+};
 export const videoGenerator = {
   available: () => !!native,
+  async getStatus(outputPath: string): Promise<NativeVideoStatus | null> {
+    return native?.getVideoStatus ? native.getVideoStatus(outputPath) : null;
+  },
+  async recover(
+    request: ResolvedVideoRequest,
+    outputPath: string,
+    onUpdate: (update: VideoGenerationUpdateContract) => void,
+  ): Promise<string> {
+    for (;;) {
+      const status = await videoGenerator.getStatus(outputPath);
+      if (!status) throw new Error('The native video job is no longer available.');
+      if (status.stage !== 'generating' || status.total === request.steps) onUpdate({
+        stage: status.stage,
+        backend: status.backend ?? null,
+        progress: status.total > 0 ? { step: status.step, total: status.total } : null,
+        ...(status.preview?.path === `${outputPath}.preview.png` ? { preview: status.preview } : {}),
+      });
+      if (status.phase === 'succeeded') return status.path;
+      if (status.phase === 'failed') {
+        throw Object.assign(new Error(status.error ?? 'Video generation failed.'), { code: status.code });
+      }
+      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+    }
+  },
   cancel: async (): Promise<void> => {
     if (native) await native.cancel();
   },

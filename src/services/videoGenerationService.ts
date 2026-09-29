@@ -100,6 +100,14 @@ class VideoGenerationService {
     }
     this.journal = saved;
     this.messageId = saved.messageId;
+    const output = `${RNFS.DocumentDirectoryPath}/generated-videos/${saved.id}.mp4`;
+    if (!saved.remoteServerId && await videoGenerator.getStatus(output)) {
+      this.completion = this.run(saved.input, saved, { nativeRecovery: true }).finally(() => {
+        this.completion = null;
+      });
+      void this.completion.catch(error => logger.warn('[Video] Recovered job failed', error));
+      return;
+    }
     this.update({
       ...EMPTY,
       id: saved.id,
@@ -262,14 +270,15 @@ class VideoGenerationService {
   private async run(
     input: VideoInput,
     resumed?: VideoJournal,
-    options?: { override?: boolean },
+    options?: { override?: boolean; nativeRecovery?: boolean },
   ): Promise<GeneratedVideo | undefined> {
     const app = useAppStore.getState();
     const model = app.downloadedVideoModels.find(
-      m => m.id === (input.model ?? app.activeVideoModelId),
+      m => m.id === (input.model ?? app.activeVideoModelId) ||
+        (options?.nativeRecovery && m.files.some(file => file.role === 'primary' && file.name === input.model)),
     );
     const remoteState = useRemoteServerStore.getState();
-    const server = remoteState.servers.find(
+    const server = options?.nativeRecovery ? undefined : remoteState.servers.find(
       s =>
         s.id ===
         (resumed?.remoteServerId ??
@@ -277,12 +286,12 @@ class VideoGenerationService {
     );
     if (resumed?.remoteServerId && !server)
       throw new Error('The OGAD server for this job is no longer configured.');
-    if (!model && !server) throw new Error('Select a video model in Models.');
+    if (!model && !server && !options?.nativeRecovery) throw new Error('Select a video model in Models.');
     const modelId =
-      resumed?.input.model ?? server?.mediaModels?.video ?? model!.id;
+      (options?.nativeRecovery ? model?.id : resumed?.input.model) ?? server?.mediaModels?.video ?? model!.id;
     const primary =
       server?.mediaModels?.video ??
-      model!.files.find(f => f.role === 'primary')!.name;
+      model?.files.find(f => f.role === 'primary')?.name ?? input.model!;
     let request = resolveVideoRequest({ ...input, model: primary }, {
       ...(app.settings.videoParams?.[primary] ??
         app.settings.videoParams?.default),
@@ -303,7 +312,7 @@ class VideoGenerationService {
       phase: 'running',
       conversationId: input.conversationId ?? null,
       stage: 'preparing',
-      startedAt: Date.now(),
+      startedAt: resumed?.startedAt ?? Date.now(),
     });
     if (input.conversationId) generationSession.begin(input.conversationId);
     let registration: symbol | undefined;
@@ -353,7 +362,7 @@ class VideoGenerationService {
       }
       if (this.cancelled) throw new Error('Video generation stopped.');
       this.update({ stage: 'preparing', enhancedPrompt: request.prompt });
-      this.journal.input = { ...this.journal.input, ...request };
+      this.journal.input = { ...this.journal.input, ...request, model: modelId };
       await this.persist();
       await RNFS.mkdir(directory);
       let path = output,
@@ -383,31 +392,35 @@ class VideoGenerationService {
         resultId = remote.provenance ? remote.syncId : id;
         provenance = remote.provenance;
       } else {
-        const pack = await resolveVideoPack(model!);
+        const pack = options?.nativeRecovery ? null : await resolveVideoPack(model!);
         await modelResidencyManager.runExclusive(
           'video-generation',
           async () => {
             const sizeMB =
-              model!.files.reduce(
+              (model?.files.reduce(
                 (sum, file) => sum + (file.sizeBytes ?? 0),
                 0,
-              ) /
+              ) ?? 0) /
                 1048576 +
               (request.width * request.height * request.frames * 12) / 1048576 +
               1024;
             const spec = {
               key: 'video',
               type: 'video' as const,
-              modelId: model!.id,
+              modelId,
               sizeMB,
               dirtyMemory: true,
               canEvict: () => false,
             };
-            const fit = await modelResidencyManager.makeRoomFor(spec, options);
-            if (!fit.fits)
-              throw new OverridableMemoryError(
-                'Not enough available memory for this video model and clip size.',
-              );
+            // The surviving native worker already owns this memory. Do not evict
+            // or load models while reattaching a replacement React bridge.
+            if (!options?.nativeRecovery) {
+              const fit = await modelResidencyManager.makeRoomFor(spec, options);
+              if (!fit.fits)
+                throw new OverridableMemoryError(
+                  'Not enough available memory for this video model and clip size.',
+                );
+            }
             if (this.cancelled) throw new Error('Video generation stopped.');
             registration = modelResidencyManager.register(spec, () =>
               this.cancelGeneration(),
@@ -415,11 +428,13 @@ class VideoGenerationService {
           },
         );
         if (this.cancelled) throw new Error('Video generation stopped.');
-        path = await videoGenerator.generate(
-          request, pack, output,
-          update => this.update(update),
-          reason => this.update({ error: reason, progress: null, preview: null }),
-        );
+        path = options?.nativeRecovery
+          ? await videoGenerator.recover(request, output, update => this.update(update))
+          : await videoGenerator.generate(
+              request, pack!, output,
+              update => this.update(update),
+              reason => this.update({ error: reason, progress: null, preview: null }),
+            );
       }
       if (this.cancelled) throw new Error('Video generation stopped.');
       const result: GeneratedVideo = {

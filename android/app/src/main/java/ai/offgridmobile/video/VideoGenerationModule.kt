@@ -14,9 +14,14 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class VideoGenerationModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context), LifecycleEventListener {
-    companion object { init { System.loadLibrary("offgrid_video") } }
+    companion object {
+        init { System.loadLibrary("offgrid_video") }
+        // JNI owns one process-wide runtime, even when React recreates its bridge.
+        private val busy = AtomicBoolean(false)
+        @Volatile private var activeVideo: VideoGenerationModule? = null
+        @Volatile private var videoStatus: Map<String, Any?>? = null
+    }
     private val executor = Executors.newSingleThreadExecutor()
-    private val busy = AtomicBoolean(false)
     private val cancelled = AtomicBoolean(false)
     private val videoScreenActive = AtomicBoolean(false)
     private var awakeWindow: Window? = null
@@ -68,7 +73,12 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
     @ReactMethod fun addListener(name: String) {}
     @ReactMethod fun removeListeners(count: Int) {}
     private fun stop() { cancelled.set(true); nativeCancel() }
-    @ReactMethod fun cancel(promise: Promise) { stop(); promise.resolve(null) }
+    @ReactMethod fun cancel(promise: Promise) { (activeVideo ?: this).stop(); promise.resolve(null) }
+    @ReactMethod fun getVideoStatus(outputPath: String, promise: Promise) {
+        val status = videoStatus?.takeIf { it["path"] == outputPath }
+        keepVideoScreenAwake(status?.get("phase") == "running")
+        promise.resolve(status?.let { Arguments.makeNativeMap(it) })
+    }
     // Called synchronously by JNI while its worker owns the runtime.
     fun conditioning(backend: String) { emit("conditioning", 0, 0, backend) }
     fun progress(step: Int, total: Int) {
@@ -100,15 +110,21 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
         checkNotNull(encoder).append(rgb, channels) { cancelled.get() }
     }
     private fun emit(stage: String, step: Int, total: Int, backend: String? = null, preview: WritableMap? = null) {
+        videoStatus = videoStatus?.plus(mapOf(
+            "stage" to stage, "step" to step, "total" to total, "backend" to backend,
+        ))?.let { status -> if (preview != null) status + ("preview" to preview.toHashMap()) else status }
         if (!context.hasActiveReactInstance()) return
         context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit("VideoGenerationProgress", Arguments.createMap().apply { putString("stage", stage); putInt("step", step); putInt("total", total); if (backend != null) putString("backend", backend); if (preview != null) putMap("preview", preview) })
     }
     @ReactMethod fun generate(input: ReadableMap, promise: Promise) {
         if (!busy.compareAndSet(false, true)) { promise.reject("VIDEO_BUSY", "Video generation is already running."); return }
+        activeVideo = this
+        videoStatus = mapOf("path" to input.getString("outputPath"), "phase" to "running", "stage" to "preparing", "step" to 0, "total" to 0)
         cancelled.set(false); nativePrepare()
         executor.execute {
             var output: File? = null
+            var terminal: Map<String, Any?> = mapOf("phase" to "failed", "code" to "VIDEO_FAILED", "error" to "Video generation failed.")
             try {
                 keepVideoScreenAwake(true)
                 prepareHexagonRuntime()
@@ -133,13 +149,19 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
                     writer.finish { cancelled.get() }
                 }
                 check(destination.length() > 0) { "Video encoder produced no file." }
+                terminal = mapOf("phase" to "succeeded")
                 promise.resolve(Arguments.createMap().apply { putString("path", destination.path) })
             } catch (error: Throwable) {
-                output?.delete(); promise.reject(if (cancelled.get()) "VIDEO_CANCELLED" else "VIDEO_FAILED", error.message, error)
+                val code = if (cancelled.get()) "VIDEO_CANCELLED" else "VIDEO_FAILED"
+                terminal = mapOf("phase" to "failed", "code" to code, "error" to (error.message ?: "Video generation failed."))
+                output?.delete(); promise.reject(code, error.message, error)
             } finally {
                 keepVideoScreenAwake(false)
                 encoder = null; previewFile = null; VideoGenerationService.cancel = null
-                context.stopService(Intent(context, VideoGenerationService::class.java)); busy.set(false)
+                context.stopService(Intent(context, VideoGenerationService::class.java))
+                videoStatus = videoStatus?.plus(terminal)
+                activeVideo = null
+                busy.set(false)
             }
         }
     }
@@ -201,6 +223,9 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
     override fun invalidate() {
         keepVideoScreenAwake(false)
         context.removeLifecycleEventListener(this)
-        stop(); executor.shutdown(); super.invalidate()
+        // A bridge reload must not cancel a video owned by the foreground service.
+        // The replacement bridge reads its retained status and completion.
+        if (activeVideo == null) stop()
+        executor.shutdown(); super.invalidate()
     }
 }
