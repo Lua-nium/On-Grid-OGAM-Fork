@@ -1,3 +1,5 @@
+import { CATALOG, videoPackError } from '@offgrid/models';
+import { videoGenerator } from './videoGenerator';
 import { recommendedModelsForDevice, ramFitScore } from '../utils/recommendedModels';
 import { fileExceedsBudget } from './memoryBudget';
 import { fetchModelFiles } from './modelCatalogFiles';
@@ -12,6 +14,7 @@ type CompatibleTextModel = ReturnType<typeof recommendedModelsForDevice>[number]
 
 export interface AutoSetupCatalogBoundaries {
   totalMemoryGB: () => number;
+  videoAvailable?: () => boolean;
   fetchTextFiles: typeof fetchModelFiles;
   imageRecommendation: typeof hardwareService.getImageModelRecommendation;
   imageModels: typeof autoSetupImageCatalogProvider.load;
@@ -19,6 +22,7 @@ export interface AutoSetupCatalogBoundaries {
 
 const productionCatalogBoundaries: AutoSetupCatalogBoundaries = {
   totalMemoryGB: () => hardwareService.getTotalMemoryGB(),
+  videoAvailable: () => videoGenerator.available(),
   fetchTextFiles: fetchModelFiles,
   imageRecommendation: () => hardwareService.getImageModelRecommendation(),
   imageModels: () => autoSetupImageCatalogProvider.load(),
@@ -87,5 +91,16 @@ export async function loadAutoSetupCompatibleCatalog(
     payload: { modelId: model.id },
   }));
 
-  return { text, image, stt };
+  const video = boundaries.videoAvailable?.() ? CATALOG.flatMap(model => {
+    if (model.kind !== 'video' || model.availability === 'coming_soon' ||
+        !model.minRamGb || model.minRamGb > ramGB || videoPackError(model.files) ||
+        model.files.some(file => !file.sizeBytes)) return [];
+    const sizeBytes = model.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
+    if (fileExceedsBudget(sizeBytes, ramGB)) return [];
+    return [{
+      id: model.id, name: model.name, kind: 'video' as const, sizeBytes,
+      fitScore: ramFitScore(model.minRamGb, ramGB), payload: model,
+    }];
+  }) : [];
+  return { text, image, stt, video };
 }

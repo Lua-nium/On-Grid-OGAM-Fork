@@ -296,7 +296,7 @@ export function createAutoSetupSession(
     });
     if (activeIds.size === 0) return;
 
-    const [text, image, stt] = plan.items;
+    const [text, image, stt, video] = plan.items;
     const jobs = [
       {
         id: autoSetupDownloadId(text),
@@ -310,6 +310,10 @@ export function createAutoSetupSession(
         id: autoSetupDownloadId(stt),
         run: () => downloads.start({ modelType: 'stt', modelId: stt.payload.modelId }),
       },
+      ...(video ? [{
+        id: autoSetupDownloadId(video),
+        run: () => downloads.start({ modelType: 'video', model: video.payload }),
+      }] : []),
     ].filter(job => activeIds.has(job.id));
     const starts = await Promise.allSettled(jobs.map(job => job.run()));
     if (disposed || token !== operation) return;
@@ -369,6 +373,9 @@ export function createAutoSetupSession(
         }
         if (app.activeImageModelId === null) {
           app.setActiveImageModelId(plan.items[1].id);
+        }
+        if (app.activeVideoModelId === null && plan.items[3]) {
+          app.setActiveVideoModelId(plan.items[3].id);
         }
       }
     },

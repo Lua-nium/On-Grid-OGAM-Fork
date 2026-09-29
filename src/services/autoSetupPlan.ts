@@ -1,8 +1,9 @@
+import type { ModelEntry } from '@offgrid/models';
 import type { ModelFile } from '../types';
 import type { ImageModelDescriptor } from './imageModelDownloadTypes';
 
 export type AutoSetupTier = 'lean' | 'balanced' | 'extreme';
-type AutoSetupModelKind = 'text' | 'image' | 'stt';
+type AutoSetupModelKind = 'text' | 'image' | 'stt' | 'video';
 
 interface AutoSetupCandidate<T = unknown> {
   id: string;
@@ -22,11 +23,13 @@ export interface AutoSetupPlan {
     AutoSetupCandidate<{ modelId: string; file: ModelFile }>,
     AutoSetupCandidate<ImageModelDescriptor>,
     AutoSetupCandidate<{ modelId: string }>,
+    ...AutoSetupCandidate<ModelEntry>[],
   ];
   totalBytes: number;
 }
 
 export interface AutoSetupCompatibleCatalog {
+  video?: AutoSetupCandidate<ModelEntry>[];
   text: AutoSetupCandidate<{ modelId: string; file: ModelFile }>[];
   image: AutoSetupCandidate<ImageModelDescriptor>[];
   stt: AutoSetupCandidate<{ modelId: string }>[];
@@ -111,7 +114,8 @@ function selectAutoSetupPlan(
       : selectedImage);
   const stt = choose(tier, catalog.stt);
   if (!text || !image || !stt) return null;
-  const items: AutoSetupPlan['items'] = [text, image, stt];
+  const video = choose(tier, catalog.video ?? []);
+  const items: AutoSetupPlan['items'] = [text, image, stt, ...(video ? [video] : [])];
   return {
     tier,
     ...PLAN_COPY[tier],

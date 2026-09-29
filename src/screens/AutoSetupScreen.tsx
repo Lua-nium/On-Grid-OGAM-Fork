@@ -28,6 +28,7 @@ type Props = {
 const labelForItem = (item: AutoSetupPlan['items'][number]) => {
   if (item.kind === 'text') return 'TEXT + VISION';
   if (item.kind === 'image') return 'IMAGE';
+  if (item.kind === 'video') return 'VIDEO';
   return 'SPEECH INPUT';
 };
 
