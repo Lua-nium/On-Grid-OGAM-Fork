@@ -30,7 +30,7 @@ interface ImageMetadata {
   imageModelRepo?: string;
   imageModelAttentionVariant?: string;
   imageModelDownloadUrl?: string;
-  imageModelHuggingFaceFiles?: { path: string; size: number }[];
+  imageModelHuggingFaceFiles?: ImageModelDescriptor['huggingFaceFiles'];
   imageModelCoremlFiles?: { path: string; relativePath: string; size: number; downloadUrl: string }[];
 }
 
@@ -157,6 +157,7 @@ type MultifileDownloadSpec = {
   relativePath: string;
   size: number;
   url: string;
+  sha256?: string;
 };
 
 async function downloadSequentialFiles(opts: {
@@ -198,15 +199,20 @@ async function downloadSequentialFiles(opts: {
   }
 }
 
-/** Verify every part is present and non-empty before registering — a download can
- *  resolve "successfully" yet write a 0-byte file (200 with no body). Existence +
- *  non-empty only (NOT exact size: descriptor sizes drift from real bytes). Throws so
- *  the caller's catch fails it (retry-able) instead of registering garbage. */
-async function validateMultifileComplete(modelDir: string, files: MultifileDownloadSpec[]): Promise<void> {
+/** Check all parts before registration. Pinned packs also supply a content hash;
+ * legacy descriptors retain their non-empty check because their sizes can drift. */
+export async function validateMultifileComplete(
+  modelDir: string,
+  files: { relativePath: string; sha256?: string }[],
+): Promise<void> {
+  if (files.length === 0) throw new Error('Download file list missing. Please retry.');
   for (const file of files) {
     const filePath = `${modelDir}/${file.relativePath}`;
     const size = (await statFile(filePath))?.size ?? -1;
     if (size <= 0) throw new Error(`Downloaded file missing or empty: ${file.relativePath} — tap retry`);
+    if (file.sha256 && (await RNFS.hash(filePath, 'sha256')).toLowerCase() !== file.sha256.toLowerCase()) {
+      throw new Error(`Downloaded file is damaged: ${file.relativePath} — tap retry`);
+    }
   }
 }
 
@@ -333,7 +339,8 @@ export async function downloadHuggingFaceModel(
     const files = modelInfo.huggingFaceFiles.map((file) => ({
       relativePath: file.path,
       size: file.size,
-      url: `https://huggingface.co/${modelInfo.huggingFaceRepo}/resolve/main/${file.path}`,
+      url: file.downloadUrl ?? `https://huggingface.co/${modelInfo.huggingFaceRepo}/resolve/main/${file.path}`,
+      sha256: file.sha256,
     }));
     await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);

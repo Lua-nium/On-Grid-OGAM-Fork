@@ -19,7 +19,7 @@ export interface ImageModelDescriptor {
   backend: 'mnn' | 'qnn' | 'coreml';
   variant?: string;
   huggingFaceRepo?: string;
-  huggingFaceFiles?: { path: string; size: number }[];
+  huggingFaceFiles?: { path: string; size: number; downloadUrl?: string; sha256?: string }[];
   coremlFiles?: { path: string; relativePath: string; size: number; downloadUrl: string }[];
   repo?: string;
   attentionVariant?: 'split_einsum' | 'original';
