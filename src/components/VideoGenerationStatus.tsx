@@ -42,7 +42,7 @@ export function VideoGenerationStatus({
       : state.stage === 'encoding'
       ? 'Saving video'
       : samplingFinished
-      ? 'Finishing video'
+      ? 'Decoding video frames'
       : 'Generating video';
   const steps =
     state.stage === 'generating' && state.progress && !samplingFinished
