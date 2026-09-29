@@ -16,7 +16,6 @@ import Icon from 'react-native-vector-icons/Feather';
 import VideoPlayer, { type VideoPlayerRef } from 'react-native-video-player';
 import { ResizeMode } from 'react-native-video';
 import { useTheme } from '../../../theme';
-import { COLORS_DARK } from '../../../theme/palettes';
 import { SPACING, TYPOGRAPHY } from '../../../constants';
 import { Button } from '../../Button';
 // Imported directly, not through the barrel: a component that reaches its sibling via the index
@@ -137,7 +136,7 @@ function VideoAttachment({ attachment }: { attachment: MediaAttachment }) {
             variant="ghost"
             size="small"
             disabled={!loaded}
-            icon={<Icon name="minimize-2" size={SPACING.lg} color={COLORS_DARK.text} />}
+            icon={<Icon name="minimize-2" size={SPACING.lg} color={colors.text} />}
             style={{ width: SPACING.xl * 2, height: SPACING.xl * 2, paddingHorizontal: 0 }}
             onPress={async () => {
               try {
@@ -167,16 +166,16 @@ function VideoAttachment({ attachment }: { attachment: MediaAttachment }) {
         onError={() => setError('This video could not be played.')}
         customStyles={{
           wrapper: { width: '100%', borderRadius: SPACING.sm, overflow: 'hidden' },
-          controls: { backgroundColor: COLORS_DARK.surface, height: SPACING.xl * 2, marginTop: 0 },
+          controls: { backgroundColor: colors.surface, height: SPACING.xl * 2, marginTop: 0 },
           controlButton: { width: SPACING.xl * 2, height: SPACING.xl * 2, padding: SPACING.sm, alignItems: 'center', justifyContent: 'center' },
-          controlIcon: { tintColor: COLORS_DARK.text, width: SPACING.lg, height: SPACING.lg },
-          playArrow: { tintColor: COLORS_DARK.text, width: SPACING.lg, height: SPACING.lg, marginLeft: 0 },
-          playButton: { backgroundColor: COLORS_DARK.surface, width: SPACING.xl * 2, height: SPACING.xl * 2, borderRadius: SPACING.sm },
+          controlIcon: { tintColor: colors.text, width: SPACING.lg, height: SPACING.lg },
+          playArrow: { tintColor: colors.text, width: SPACING.lg, height: SPACING.lg, marginLeft: 0 },
+          playButton: { backgroundColor: colors.surface, width: SPACING.xl * 2, height: SPACING.xl * 2, borderRadius: SPACING.sm },
           seekBar: { flex: 1, minWidth: 0, paddingHorizontal: SPACING.xs, marginLeft: 0, marginRight: SPACING.sm },
-          seekBarProgress: { backgroundColor: COLORS_DARK.primary },
-          seekBarKnob: { backgroundColor: COLORS_DARK.primary, width: SPACING.sm, height: SPACING.sm, marginHorizontal: -SPACING.xs, marginVertical: 0 },
-          seekBarBackground: { backgroundColor: COLORS_DARK.border },
-          durationText: { ...TYPOGRAPHY.meta, color: COLORS_DARK.textSecondary, flexShrink: 0 },
+          seekBarProgress: { backgroundColor: colors.primary },
+          seekBarKnob: { backgroundColor: colors.primary, width: SPACING.sm, height: SPACING.sm, marginHorizontal: -SPACING.xs, marginVertical: 0 },
+          seekBarBackground: { backgroundColor: colors.border },
+          durationText: { ...TYPOGRAPHY.meta, color: colors.textSecondary, flexShrink: 0 },
         }}
       />
       {error && <Text accessibilityRole="alert" style={{ ...TYPOGRAPHY.bodySmall, color: colors.error }}>{error}</Text>}
