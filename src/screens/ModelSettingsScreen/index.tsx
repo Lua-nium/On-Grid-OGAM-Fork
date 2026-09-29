@@ -19,6 +19,7 @@ import { SystemPromptSection } from './SystemPromptSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
 import { VoiceTurnSettings } from '../../components/settings/voiceSections';
+import { GeneralGenerationControls } from '../../components/settings/GeneralGenerationControls';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import {
@@ -34,6 +35,7 @@ export const ModelSettingsScreen: React.FC = () => {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const [promptOpen, setPromptOpen] = useState(false);
+  const [generalOpen, setGeneralOpen] = useState(false);
   const [imageOpen, setImageOpen] = useState(false);
   const [textOpen, setTextOpen] = useState(false);
   const [ttsOpen, setTtsOpen] = useState(false);
@@ -82,6 +84,18 @@ export const ModelSettingsScreen: React.FC = () => {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
       >
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => setGeneralOpen(!generalOpen)}
+          activeOpacity={0.7}
+          testID="general-generation-accordion"
+          accessibilityRole="button"
+          accessibilityState={{ expanded: generalOpen }}
+        >
+          <Text style={styles.accordionTitle}>General</Text>
+          <Icon name={generalOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+        {generalOpen && <View style={styles.settingSection}><GeneralGenerationControls /></View>}
           <TouchableOpacity
             style={styles.accordionHeader}
             onPress={() => setPromptOpen(!promptOpen)}

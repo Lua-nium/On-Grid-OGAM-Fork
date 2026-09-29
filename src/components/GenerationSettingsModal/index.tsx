@@ -8,6 +8,7 @@ import { useAppStore } from '../../stores';
 import { llmService } from '../../services';
 import { createStyles } from './styles';
 import { VoiceTurnSettings } from '../settings/voiceSections';
+import { GeneralGenerationControls } from '../settings/GeneralGenerationControls';
 import { ConversationActionsSection } from './ConversationActionsSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
@@ -45,6 +46,7 @@ export const GenerationSettingsModal: React.FC<
 
   const [performanceStats, setPerformanceStats] = useState(llmService.getPerformanceStats());
   const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
+  const [generalSettingsOpen, setGeneralSettingsOpen] = useState(false);
   const [textSettingsOpen, setTextSettingsOpen] = useState(false);
   const [sttSettingsOpen, setSttSettingsOpen] = useState(false);
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(false);
@@ -98,12 +100,22 @@ export const GenerationSettingsModal: React.FC<
           activeProjectName={activeProjectName}
         />
 
+        <TouchableOpacity
+          style={[styles.accordionHeader, !hasConversationActions && styles.accordionHeaderNoMargin]}
+          onPress={() => setGeneralSettingsOpen(!generalSettingsOpen)}
+          activeOpacity={0.7}
+          testID="modal-general-accordion"
+          accessibilityRole="button"
+          accessibilityState={{ expanded: generalSettingsOpen }}
+        >
+          <Text style={styles.accordionTitle}>GENERAL</Text>
+          <Icon name={generalSettingsOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+        {generalSettingsOpen && <View style={styles.sectionCard}><GeneralGenerationControls /></View>}
+
         {/* IMAGE GENERATION SETTINGS */}
         <TouchableOpacity
-          style={[
-            styles.accordionHeader,
-            !hasConversationActions && styles.accordionHeaderNoMargin,
-          ]}
+          style={styles.accordionHeader}
           onPress={() => setImageSettingsOpen(!imageSettingsOpen)}
           activeOpacity={0.7}
           testID="modal-image-accordion"

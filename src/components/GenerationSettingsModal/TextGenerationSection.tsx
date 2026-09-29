@@ -9,14 +9,10 @@ import {
   useTextGenerationSettings,
 } from '../../hooks/useTextGenerationSettings';
 import {
-  BackendSelector,
   BatchSizeSlider,
   CpuThreadsSlider,
   FlashAttentionToggle,
   KvCacheTypeToggle,
-  LiteRTBackendSelector,
-  ModelLoadingModeSelector,
-  ShowGenerationDetailsToggle,
   SpeculativeDecodingToggle,
   ThinkingBudgetSelector,
 } from '../settings/textGenAdvancedSections';
@@ -42,7 +38,6 @@ export const TextGenerationSection: React.FC = () => {
         <ChatSettingSlider key={setting.key} setting={setting} />
       ))}
       {!isLiteRT && <ThinkingBudgetSelector compact />}
-      <ShowGenerationDetailsToggle />
       <AdvancedToggle
         isExpanded={showAdvanced}
         onPress={() => setShowAdvanced(current => !current)}
@@ -53,20 +48,13 @@ export const TextGenerationSection: React.FC = () => {
           {advancedSettings.map(setting => (
             <ChatSettingSlider key={setting.key} setting={setting} />
           ))}
-          {isLiteRT ? (
-            <>
-              <LiteRTBackendSelector />
-              <ModelLoadingModeSelector />
-            </>
-          ) : (
+          {!isLiteRT && (
             <>
               <CpuThreadsSlider />
               <BatchSizeSlider />
-              <BackendSelector />
               <FlashAttentionToggle />
               <SpeculativeDecodingToggle />
               <KvCacheTypeToggle />
-              <ModelLoadingModeSelector />
             </>
           )}
         </>
