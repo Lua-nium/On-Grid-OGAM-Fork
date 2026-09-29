@@ -19,7 +19,8 @@ export const videoGenerator = {
   ): Promise<string> {
     if (!native)
       throw new Error('This build does not include the video engine.');
-    let lastStep = 0;
+    // Step zero marks the start of sampling, before the first step completes.
+    let lastStep = -1;
     const listener = new NativeEventEmitter(native).addListener(
       'VideoGenerationProgress',
       event => {
