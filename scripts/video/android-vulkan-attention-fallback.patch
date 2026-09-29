@@ -1,0 +1,23 @@
+--- a/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -15447,6 +15447,20 @@
+             }
+         case GGML_OP_FLASH_ATTN_EXT:
+             {
++#ifdef __ANDROID__
++                // Adreno loses the device in Wan's F32/F16 attention kernel.
++                // Keep the fused operation, but let the scheduler use CPU.
++                if (device->vendor_id == VK_VENDOR_ID_QUALCOMM &&
++                    ggml_get_op_params_i32(op, 3) == GGML_PREC_F32 &&
++                    op->src[1]->type == GGML_TYPE_F16 &&
++                    op->src[2]->type == GGML_TYPE_F16) {
++                    static std::atomic_flag reported = ATOMIC_FLAG_INIT;
++                    if (!reported.test_and_set()) {
++                        GGML_LOG_WARN("ggml_vulkan: routing Adreno F32/F16 flash attention to another backend after device loss\n");
++                    }
++                    return false;
++                }
++#endif
+                 bool coopmat2 = device->coopmat2;
+                 uint32_t HSK = op->src[1]->ne[0];
+                 uint32_t HSV = op->src[2]->ne[0];
