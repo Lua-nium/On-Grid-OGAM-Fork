@@ -159,11 +159,25 @@ class VideoGenerationService {
     useAppStore.getState().removeGeneratedVideo(id);
   }
   private reportFailure(error: unknown, remote = false) {
+    const reason = reasonFromLoadError(error);
+    const interrupted =
+      (error as { code?: string } | null)?.code === 'VIDEO_BACKGROUND_INTERRUPTED';
+    const generationFailed =
+      reason === 'load-threw' &&
+      this.state.stage !== null &&
+      this.state.stage !== 'preparing';
+    const detail = error instanceof Error ? error.message : String(error);
     reportModelFailure('video', error, {
       remote,
+      ...(interrupted || generationFailed
+        ? {
+            title: interrupted ? 'Video generation interrupted' : 'Video generation failed',
+            message: detail,
+          }
+        : {}),
       onRetry: () => {
         void (async () => {
-          if (!remote && reasonFromLoadError(error) === 'insufficient-memory')
+          if (!remote && reason === 'insufficient-memory')
             await activeModelService.ejectAll();
           await this.retry();
         })().catch(() => {});
