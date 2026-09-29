@@ -18,7 +18,7 @@
  */
 import RNFS from 'react-native-fs';
 import { statFile } from './fileStat';
-import { getSDImageModels } from '../services/huggingFaceModelBrowser';
+import { getSDImagePackFiles, isSDImageWeight } from '../services/huggingFaceModelBrowser';
 import { unzip } from 'react-native-zip-archive';
 import { ImageModelIncompleteError } from './modelLoadErrors';
 import logger from './logger';
@@ -57,9 +57,9 @@ export function checkImageModelFiles(files: ImageDirEntry[], backend: ImageBacke
   for (const f of files) if (f.isFile) sizeByName.set(f.name, f.size);
 
   if (backend === 'sd') {
-    const pack = getSDImageModels().find(model => sizeByName.has(model.fileName));
-    if (!pack?.huggingFaceFiles) return { complete: false, missing: ['image model pack'] };
-    const missing = pack.huggingFaceFiles.filter(file => (sizeByName.get(file.path) ?? 0) <= 0).map(file => file.path);
+    const files = getSDImagePackFiles([...sizeByName.keys()]);
+    if (!files) return { complete: false, missing: ['image model pack'] };
+    const missing = files.filter(file => (sizeByName.get(file.path) ?? 0) <= 0).map(file => file.path);
     return { complete: missing.length === 0, missing };
   }
 
@@ -126,8 +126,7 @@ export async function resolveImageModelDir(modelPath: string, backend: ImageBack
     // qnn models also ship a clip_v2.mnn; the marker that disambiguates is the unet.
     try {
       if (backend === 'sd') {
-        for (const model of getSDImageModels()) if (await RNFS.exists(`${dir}/${model.fileName}`)) return true;
-        return false;
+        return (await RNFS.readDir(dir)).some(file => file.isFile() && isSDImageWeight(file.name));
       }
       return await RNFS.exists(`${dir}/${marker}`);
     } catch { return false; }

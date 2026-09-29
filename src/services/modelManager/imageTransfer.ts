@@ -1,4 +1,3 @@
-import { getSDImageModels } from '../huggingFaceModelBrowser';
 import type { DevicePlatform, TransferredModelManifest } from '@offgrid/sync';
 import type { ONNXImageModel } from '../../types';
 
@@ -70,7 +69,7 @@ export function imageModelTransferBlocker(
       ? 'iPhone and iPad can send only Core ML image models'
       : 'Android can send only LocalDream MNN image models';
   }
-  if (model.backend === 'sd' && !getSDImageModels().some(pack => pack.id === model.id)) return 'this image model pack is not supported';
+  if (model.backend === 'sd' && !model.id.startsWith('sd-')) return 'this image model pack is not supported';
   if (!Number.isFinite(model.size) || model.size <= 0) {
     return 'the image model size is not valid';
   }
@@ -165,7 +164,7 @@ export function transferredImageDescriptor(
     throw new Error('this is not an image model package');
   }
   const sdPack = manifest.engine === 'mobile-sd-gguf';
-  if (sdPack && !getSDImageModels().some(pack => pack.id === manifest.id)) throw new Error('This image model pack is not supported.');
+  if (sdPack && !manifest.id.startsWith('sd-')) throw new Error('This image model pack is not supported.');
   const expected = expectedImageRuntime(receiverPlatform, sdPack ? 'sd' : undefined);
   if (
     (!sdPack && manifest.platform !== receiverPlatform) ||

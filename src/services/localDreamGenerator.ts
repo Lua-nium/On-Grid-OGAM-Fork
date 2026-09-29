@@ -84,7 +84,7 @@ class LocalDreamGeneratorService {
       if (!SDModule?.loadImageModel) throw new Error('This build does not include the SD image runtime.');
       const integrity = await validateImageModelDir(modelPath, 'sd');
       if (!integrity.complete) throw new Error(`The image model pack is incomplete: ${integrity.missing.join(', ')}`);
-      const pack = resolveSDImagePack(opts.modelId ?? modelPath.split('/').pop() ?? '', modelPath);
+      const pack = await resolveSDImagePack(opts.modelId ?? modelPath.split('/').pop() ?? '', modelPath);
       if (await DiffusionModule?.isModelLoaded()) await DiffusionModule.unloadModel();
       await SDModule.loadImageModel({ modelPath, ...pack, threads: threads ?? 4, cpuOnly: opts.cpuOnly ?? false });
       this.usingSD = true; this.eventEmitter = null; this.loadedThreads = threads ?? 4;

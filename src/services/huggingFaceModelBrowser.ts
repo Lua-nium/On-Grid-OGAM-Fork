@@ -1,4 +1,5 @@
-import { CATALOG } from '@offgrid/models';
+import { CATALOG, searchHuggingFace, getModelFiles } from '@offgrid/models';
+import RNFS from 'react-native-fs';
 import type { ImageModelDescriptor } from './imageModelDownloadTypes';
 
 export interface HFImageModel {
@@ -157,11 +158,51 @@ export function getSDImageModels(): HFImageModel[] {
   }));
 }
 
-export function resolveSDImagePack(modelId: string, modelPath: string) {
-  const model = getSDImageModels().find(candidate => candidate.id === modelId);
-  if (!model?.huggingFaceFiles) throw new Error('This image model pack is not supported.');
+/** Supported SD image weights; other architectures need their own complete pack. */
+export const isSDImageWeight = (name: string): boolean => /^qwen_image_2\.1-.*\.gguf$/i.test(name);
+
+/** The same required-file list is used by loading, recovery, and model transfer. */
+export function getSDImagePackFiles(names: string[], modelId?: string): NonNullable<HFImageModel['huggingFaceFiles']> | null {
+  const weights = names.filter(isSDImageWeight);
+  if (weights.length !== 1) return null;
+  const template = getSDImageModels()[0];
+  if (!template?.huggingFaceFiles) return null;
+  return template.huggingFaceFiles.map(file => file.path === template.fileName
+    ? { path: weights[0], size: 0, sha256: modelId === template.id && weights[0] === file.path ? file.sha256 : undefined }
+    : file);
+}
+
+export async function searchSDImageModels(query: string): Promise<HFImageModel[]> {
+  const repositories = await searchHuggingFace(query, { kind: 'image', limit: 10 });
+  const template = getSDImageModels()[0];
+  if (!template?.huggingFaceFiles) return [];
+  const companion = template.huggingFaceFiles.filter(file => file.path !== template.fileName);
+  const listings = await Promise.allSettled(repositories.map(async repo => {
+    const files = await getModelFiles(repo.id, { kind: 'image' });
+    return files.filter(file => isSDImageWeight(file.fileName) && file.sizeBytes > 0).map(file => {
+      const canonical = repo.id === template.repo && file.fileName === template.fileName;
+      if (canonical) return template;
+      const id = `sd-${repo.id.replaceAll('/', '--')}--${file.fileName}`;
+      return {
+        id, name: `${template.name} ${file.quant}`, displayName: `${template.displayName} · ${file.quant}`,
+        backend: 'sd' as const, repo: repo.id, fileName: file.fileName,
+        downloadUrl: file.downloadUrl,
+        size: file.sizeBytes + companion.reduce((sum, part) => sum + part.size, 0),
+        huggingFaceFiles: [{ path: file.fileName, size: file.sizeBytes, downloadUrl: file.downloadUrl, sha256: file.sha256 }, ...companion],
+      };
+    }).filter(model => model.id.length <= 160);
+  }));
+  if (listings.length && listings.every(result => result.status === 'rejected')) {
+    throw new Error('Could not read image model files from Hugging Face. Try again.');
+  }
+  return listings.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+}
+
+export async function resolveSDImagePack(_modelId: string, modelPath: string) {
+  const files = getSDImagePackFiles((await RNFS.readDir(modelPath)).filter(file => file.isFile()).map(file => file.name));
+  if (!files) throw new Error('This image model pack is not supported.');
   const required = (pattern: RegExp) => {
-    const file = model.huggingFaceFiles!.find(part => pattern.test(part.path));
+    const file = files.find(part => pattern.test(part.path));
     if (!file) throw new Error('The image model pack is incomplete.');
     return `${modelPath}/${file.path}`;
   };

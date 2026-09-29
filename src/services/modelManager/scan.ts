@@ -1,4 +1,5 @@
-import { getSDImageModels } from '../huggingFaceModelBrowser';
+import { extractQuantization } from '@offgrid/models';
+import { getSDImageModels, getSDImagePackFiles, isSDImageWeight } from '../huggingFaceModelBrowser';
 import RNFS from 'react-native-fs';
 import { statFile } from '../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
@@ -86,7 +87,7 @@ export async function cleanupMMProjEntries(modelsDir: string): Promise<number> {
 }
 
 function detectBackend(dirName: string): 'mnn' | 'qnn' | 'coreml' | 'sd' {
-  if (getSDImageModels().some(model => model.id === dirName)) return 'sd';
+  if (dirName.startsWith('sd-')) return 'sd';
   if (dirName.includes('qnn') || dirName.includes('8gen') || dirName.includes('npu')) return 'qnn';
   if (dirName.includes('coreml')) return 'coreml';
   return 'mnn';
@@ -145,9 +146,10 @@ async function buildRecoveredImageModel(
   let modelPath = item.path;
   if (backend === 'coreml') modelPath = await resolveCoreMLModelDir(item.path).catch(() => item.path);
   const totalSize = await getDirSize(item.path);
+  const sdWeight = backend === 'sd' ? (await RNFS.readDir(item.path)).find(file => file.isFile() && isSDImageWeight(file.name))?.name : undefined;
   return {
     id: item.name,
-    name: getSDImageModels().find(model => model.id === item.name)?.displayName ?? item.name.replaceAll('_', ' '),
+    name: getSDImageModels().find(model => model.id === item.name)?.displayName ?? (sdWeight ? `Qwen Image 2.1 ${extractQuantization(sdWeight)}` : item.name.replaceAll('_', ' ')),
     description: '',
     modelPath,
     size: totalSize,
@@ -251,10 +253,11 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
 
       // A complete SD pack can survive a stop between its last file and _ready.
       // Keep partial known packs so the normal download can reuse valid parts.
-      const sdPack = getSDImageModels().find(model => model.id === item.name);
-      if (sdPack?.huggingFaceFiles) {
+      const sdFiles = item.name.startsWith('sd-') ? getSDImagePackFiles((await RNFS.readDir(item.path)).filter(file => file.isFile()).map(file => file.name), item.name) : null;
+      if (item.name.startsWith('sd-')) {
         try {
-          await validateMultifileComplete(item.path, sdPack.huggingFaceFiles.map(file => ({
+          if (!sdFiles) continue;
+          await validateMultifileComplete(item.path, sdFiles.map(file => ({
             relativePath: file.path, sha256: file.sha256,
           })));
           await RNFS.writeFile(readyPath, '', 'utf8');
