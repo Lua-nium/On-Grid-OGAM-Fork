@@ -4,6 +4,8 @@ import RNFS from 'react-native-fs';
 import type {
   ResolvedVideoRequest,
   VideoGenerationResultContract,
+  VideoGenerationProgressContract,
+  VideoGenerationStage,
 } from '@offgrid/models';
 import { remoteServerManager } from './remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../types';
@@ -111,7 +113,10 @@ export const remoteMediaRuntime = {
       model?: string;
       jobId?: string;
       onJobStarted: (id: string) => Promise<unknown>;
-      onProgress: (progress: { step: number; total: number }) => void;
+      onProgress: (
+        progress: VideoGenerationProgressContract | null,
+        stage?: VideoGenerationStage,
+      ) => void;
     },
   ): Promise<
     VideoGenerationResultContract & { provenance?: RecordProvenance }
@@ -169,6 +174,7 @@ export const remoteMediaRuntime = {
           response =>
             response.json() as Promise<{
               status: string;
+              stage?: VideoGenerationStage;
               progress?: { step: number; total: number };
               error?: { message: string };
               result?: VideoGenerationResultContract & {
@@ -176,8 +182,16 @@ export const remoteMediaRuntime = {
               };
             }>,
         );
-        if (state.progress) options.onProgress(state.progress);
-        if (state.status === 'failed')
+        const progress =
+          state.progress && Number.isFinite(state.progress.step) && Number.isFinite(state.progress.total)
+            ? state.progress
+            : null;
+        const stage =
+          state.stage && ['enhancing', 'preparing', 'conditioning', 'generating', 'encoding'].includes(state.stage)
+            ? state.stage
+            : undefined;
+        if (progress || stage) options.onProgress(progress, stage);
+        if (state.status === 'failed' || state.status === 'cancelled')
           throw Object.assign(
             new Error(
               state.error?.message ?? 'Remote video generation failed.',

@@ -357,8 +357,8 @@ class VideoGenerationService {
                 await this.persist();
               }
             },
-            onProgress: progress =>
-              this.update({ stage: 'generating', progress }),
+            onProgress: (progress, stage) =>
+              this.update({ stage: stage ?? 'generating', progress }),
           },
         );
         path = remote.path;
