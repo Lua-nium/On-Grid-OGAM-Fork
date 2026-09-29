@@ -77,7 +77,7 @@ index d87353d..e491eff 100644
      return x;
  }
 diff --git a/src/core/ggml_runner.cpp b/src/core/ggml_runner.cpp
-index 4c156ed..b786dd7 100644
+index 4c156ed..c01c8d0 100644
 --- a/src/core/ggml_runner.cpp
 +++ b/src/core/ggml_runner.cpp
 @@ -230,7 +230,12 @@ void GGMLRunner::pin_multi_device_nodes(ggml_backend_sched_t sched, ggml_cgraph*
@@ -94,3 +94,18 @@ index 4c156ed..b786dd7 100644
              ggml_backend_sched_set_tensor_backend(sched, node, current);
          }
      }
+@@ -728,8 +733,12 @@ std::vector<DeviceMemoryRequest> GGMLRunner::memory_requests(
+         const size_t reusable    = workspace_.bytes(size.backend);
+         const size_t cache_bytes = size.backend == runtime_backend ? pending_cache_bytes : 0;
+         const size_t pending     = add_bytes(size.bytes > reusable ? size.bytes - reusable : 0, cache_bytes);
+-        size_t limit             = max_graph_vram_bytes;
+-        if (is_multi_device()) {
++        // A fallback device has its own physical memory checks. Do not apply
++        // the primary device's address-space cap (for example Hexagon's) to it.
++        const bool configured_backend = size.backend == runtime_backend ||
++            std::find(extra_runtime_backends.begin(), extra_runtime_backends.end(), size.backend) != extra_runtime_backends.end();
++        size_t limit = configured_backend ? max_graph_vram_bytes : 0;
++        if (configured_backend && is_multi_device()) {
+             size_t index = 0;
+             if (size.backend != runtime_backend) {
+                 auto position = std::find(extra_runtime_backends.begin(), extra_runtime_backends.end(), size.backend);
