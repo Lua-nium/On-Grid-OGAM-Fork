@@ -64,6 +64,16 @@ describe('model settings surface parity', () => {
     expect(modelSettings.getByTestId('show-gen-details-on-button')).toBeTruthy();
   });
 
+  it('shows and edits the saved default system prompt in chat Text settings', () => {
+    useAppStore.getState().updateSettings({ systemPrompt: 'Saved instructions' });
+    const chatSettings = render(<GenerationSettingsModal visible onClose={() => {}} />);
+    fireEvent.press(chatSettings.getByText('TEXT GENERATION'));
+    const input = chatSettings.getByTestId('default-system-prompt-input');
+    expect(input.props.value).toBe('Saved instructions');
+    fireEvent.changeText(input, 'New instructions');
+    expect(useAppStore.getState().settings.systemPrompt).toBe('New instructions');
+  });
+
   it('caps output by context on both surfaces and writes one shared setting state', () => {
     useAppStore.getState().setModelMaxContext(262144);
     // A context wide enough for the output this test chooses. Max tokens is capped BY the context,
