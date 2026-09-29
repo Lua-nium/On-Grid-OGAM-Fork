@@ -1,3 +1,5 @@
+import { statFile } from '../utils/fileStat';
+import { videoModelDirectory } from '../services/videoModelFiles';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -45,13 +47,6 @@ export const StorageSettingsScreen: React.FC = () => {
     0,
   );
 
-  const videoStorageUsed = downloadedVideoModels.reduce(
-    (total, model) =>
-      total +
-      model.files.reduce((size, file) => size + (file.sizeBytes ?? 0), 0),
-    0,
-  );
-
   // A "stale" entry is a store entry missing the basic fields needed to
   // display or finalize it. Now sourced from the unified download store.
   const staleDownloads = Object.values(downloads).filter(entry => {
@@ -59,11 +54,18 @@ export const StorageSettingsScreen: React.FC = () => {
   });
 
   const loadStorageInfo = useCallback(async () => {
+    const videoSizes = await Promise.all(downloadedVideoModels.flatMap(model =>
+      model.files.map(async file => {
+        const facts = await statFile(`${videoModelDirectory(model.id)}/${file.name}`);
+        return facts?.isFile ? facts.size : 0;
+      }),
+    ));
+    const videoStorageUsed = videoSizes.reduce((total, size) => total + size, 0);
     const used = await modelManager.getStorageUsed();
     const available = await modelManager.getAvailableStorage();
     setStorageUsed(used + imageStorageUsed + videoStorageUsed);
     setAvailableStorage(available);
-  }, [imageStorageUsed, videoStorageUsed]);
+  }, [imageStorageUsed, downloadedVideoModels]);
 
   useEffect(() => {
     loadStorageInfo();

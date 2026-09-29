@@ -64,6 +64,7 @@ async function start(model: ModelEntry): Promise<void> {
   addRow(model, 'pending');
   const directory = videoModelDirectory(model.id);
   let bytes = 0;
+  const installedFiles: ModelEntry['files'] = [];
   const total = model.files.reduce(
     (sum, file) => sum + (file.sizeBytes ?? 0),
     0,
@@ -84,6 +85,7 @@ async function start(model: ModelEntry): Promise<void> {
         Number(existing.size) === file.sizeBytes &&
         (!file.sha256 || (await RNFS.hash(destination, 'sha256')).toLowerCase() === file.sha256.toLowerCase())
       ) {
+        installedFiles.push({ ...file, sizeBytes: Number(existing.size) });
         bytes += file.sizeBytes;
         useDownloadStore.getState().updateProgress(key(model.id), bytes, total);
         continue;
@@ -116,15 +118,19 @@ async function start(model: ModelEntry): Promise<void> {
         .catch(() => {});
       await task.promise;
       transfer.nativeId = undefined;
-      bytes += Number((await RNFS.stat(destination)).size);
+      const sizeBytes = Number((await RNFS.stat(destination)).size);
+      installedFiles.push({ ...file, sizeBytes });
+      bytes += sizeBytes;
     }
     if (transfer.cancelled) throw new Error('Download cancelled.');
     useDownloadStore.getState().setProcessing(key(model.id));
     await resolveVideoPack(model, true);
+    if (transfer.cancelled) throw new Error('Download cancelled.');
     const app = useAppStore.getState();
     app.addDownloadedVideoModel({
       ...model,
       kind: 'video',
+      files: installedFiles,
       downloadedAt: new Date().toISOString(),
     });
     app.setVideoDownload(model.id, null);
