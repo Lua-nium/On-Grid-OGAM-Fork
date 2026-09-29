@@ -122,6 +122,7 @@ function VideoAttachment({ attachment }: { attachment: MediaAttachment }) {
     <View style={{ width: '100%', gap: SPACING.xs }}>
       <VideoPlayer
         ref={player}
+        preload
         source={{ uri: resolveMediaUri(attachment.uri) }}
         videoWidth={size.width}
         videoHeight={size.height}
