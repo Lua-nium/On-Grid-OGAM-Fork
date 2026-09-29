@@ -7,7 +7,7 @@ import {
 } from '../types';
 import { resolveSDImagePack } from './huggingFaceModelBrowser';
 import { validateImageModelDir } from '../utils/imageModelIntegrity';
-import { generateRandomSeed } from '../utils/generateId';
+import { generateId, generateRandomSeed } from '../utils/generateId';
 import logger from '../utils/logger';
 import { resolveOwnedDocumentPath } from '../utils/resolveDocumentPath';
 
@@ -225,7 +225,7 @@ class LocalDreamGeneratorService {
       const nativeParams = this.buildNativeParams(params, trimmedPrompt);
       let result;
       if (this.usingSD) {
-        const id = `${Date.now()}-${generateRandomSeed()}`;
+        const id = generateId();
         const directory = `${RNFS.DocumentDirectoryPath}/generated_images`;
         await RNFS.mkdir(directory);
         result = await SDModule.generateImage({ ...nativeParams, id, outputPath: `${directory}/${id}.png` });
@@ -254,7 +254,7 @@ class LocalDreamGeneratorService {
     return await DiffusionModule.cancelGeneration();
   }
 
-  async isGenerating(): Promise<boolean> {
+  isGenerating(): boolean {
     return this.generating;
   }
 
