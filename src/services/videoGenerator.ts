@@ -23,6 +23,7 @@ export const videoGenerator = {
       throw new Error('This build does not include the video engine.');
     // Step zero marks the start of sampling, before the first step completes.
     let lastStep = -1;
+    let lastProgress = '';
     const listener = new NativeEventEmitter(native).addListener(
       'VideoGenerationProgress',
       event => {
@@ -45,6 +46,13 @@ export const videoGenerator = {
           )
             return;
           lastStep = event.step;
+        }
+        const progressKey = `${event.stage}:${event.step}:${event.total}`;
+        if (progressKey !== lastProgress) {
+          lastProgress = progressKey;
+          logger.log('[VideoProgress]', {
+            stage: event.stage, step: event.step, total: event.total,
+          });
         }
         onUpdate({
           stage: event.stage,
