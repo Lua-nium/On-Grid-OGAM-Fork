@@ -12,6 +12,7 @@
   dispatch_queue_t _worker;
   BOOL _busy;
   BOOL _listeners;
+  NSString *_videoInterruptionReason;
   BGTask *_continued;
   NSString *_taskIdentifier;
   dispatch_block_t _continuedWork;
@@ -34,7 +35,10 @@ RCT_EXPORT_MODULE(VideoGenerationModule)
 - (void)backgrounded {
   // Metal work must stop before the OS removes GPU access. Continued GPU tasks
   // are admitted separately by the background coordinator on supported systems.
-  if (_busy && !_continued) _runtime.cancel();
+  if (_busy && !_continued) {
+    _videoInterruptionReason = @"Video generation stopped when the app went into the background. Keep Off Grid open and try again.";
+    _runtime.cancel();
+  }
 }
 - (void)emitStage:(NSString *)stage step:(int)step total:(int)total {
   dispatch_async(dispatch_get_main_queue(), ^{
@@ -65,6 +69,7 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
   dispatch_async(dispatch_get_main_queue(), ^{
     if (self->_busy) { reject(@"VIDEO_BUSY", @"Video generation is already running.", nil); return; }
     self->_busy = YES; self->_runtime.cancelled.store(false);
+    self->_videoInterruptionReason = nil;
     [self startContinuedWork:^{
     dispatch_async(self->_worker, ^{
       @autoreleasepool {
@@ -99,7 +104,9 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
           if (self->_continued) {
             [self->_continued setTaskCompletedWithSuccess:failure == nil]; self->_continued = nil;
           }
-          if (failure) reject(self->_runtime.cancelled.load() ? @"VIDEO_CANCELLED" : @"VIDEO_FAILED", failure.localizedDescription, failure);
+          if (failure && self->_videoInterruptionReason)
+            reject(@"VIDEO_BACKGROUND_INTERRUPTED", self->_videoInterruptionReason, failure);
+          else if (failure) reject(self->_runtime.cancelled.load() ? @"VIDEO_CANCELLED" : @"VIDEO_FAILED", failure.localizedDescription, failure);
           else resolve(@{@"path":output});
         });
       }
@@ -198,7 +205,16 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
           VideoGenerationModule *owner = weakSelf;
           if (!owner || !owner->_busy) { [task setTaskCompletedWithSuccess:NO]; return; }
           owner->_continued = task;
-          task.expirationHandler = ^{ VideoGenerationModule *active = weakSelf; if (active) active->_runtime.cancel(); };
+          __weak BGTask *expiringTask = task;
+          task.expirationHandler = ^{
+            dispatch_async(dispatch_get_main_queue(), ^{
+              VideoGenerationModule *active = weakSelf;
+              if (active && active->_continued == expiringTask && active->_busy) {
+                active->_videoInterruptionReason = @"iOS stopped background video generation. Keep Off Grid open and try again.";
+                active->_runtime.cancel();
+              }
+            });
+          };
           dispatch_block_t admitted = owner->_continuedWork; owner->_continuedWork = nil;
           if (admitted) admitted();
         }];
