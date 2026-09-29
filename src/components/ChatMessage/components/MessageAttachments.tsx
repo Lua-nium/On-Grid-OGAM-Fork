@@ -128,6 +128,25 @@ function VideoAttachment({ attachment }: { attachment: MediaAttachment }) {
         resizeMode={ResizeMode.CONTAIN}
         showDuration
         disableControlsAutoHide
+        disableMute
+        additionalControl={
+          <Button
+            title=""
+            accessibilityLabel="Picture in picture"
+            variant="ghost"
+            size="small"
+            disabled={!loaded}
+            icon={<Icon name="minimize-2" size={SPACING.lg} color={COLORS_DARK.text} />}
+            style={{ width: SPACING.xl * 2, height: SPACING.xl * 2, paddingHorizontal: 0 }}
+            onPress={async () => {
+              try {
+                await player.current?.enterPictureInPicture();
+              } catch {
+                setError('Picture in picture is not available on this device.');
+              }
+            }}
+          />
+        }
         pauseOnPress
         animationDuration={reducedMotion ? 0 : 150}
         playInBackground
@@ -148,30 +167,19 @@ function VideoAttachment({ attachment }: { attachment: MediaAttachment }) {
         customStyles={{
           wrapper: { width: '100%', borderRadius: SPACING.sm, overflow: 'hidden' },
           controls: { backgroundColor: COLORS_DARK.surface, height: SPACING.xl * 2, marginTop: 0 },
-          controlButton: { minWidth: SPACING.xl * 2, minHeight: SPACING.xl * 2 },
-          controlIcon: { tintColor: COLORS_DARK.text },
-          playArrow: { tintColor: colors.text },
-          playButton: { backgroundColor: colors.surface, width: SPACING.xl * 2, height: SPACING.xl * 2, borderRadius: SPACING.sm },
+          controlButton: { width: SPACING.xl * 2, height: SPACING.xl * 2, padding: SPACING.sm, alignItems: 'center', justifyContent: 'center' },
+          controlIcon: { tintColor: COLORS_DARK.text, width: SPACING.lg, height: SPACING.lg },
+          playArrow: { tintColor: COLORS_DARK.text, width: SPACING.lg, height: SPACING.lg, marginLeft: 0 },
+          playButton: { backgroundColor: COLORS_DARK.surface, width: SPACING.xl * 2, height: SPACING.xl * 2, borderRadius: SPACING.sm },
+          seekBar: { flex: 1, minWidth: 0, paddingHorizontal: SPACING.xs, marginLeft: 0, marginRight: SPACING.sm },
           seekBarProgress: { backgroundColor: COLORS_DARK.primary },
-          seekBarKnob: { backgroundColor: COLORS_DARK.primary },
+          seekBarKnob: { backgroundColor: COLORS_DARK.primary, width: SPACING.sm, height: SPACING.sm, marginHorizontal: -SPACING.xs, marginVertical: 0 },
           seekBarBackground: { backgroundColor: COLORS_DARK.border },
-          durationText: { ...TYPOGRAPHY.meta, color: COLORS_DARK.textSecondary },
+          durationText: { ...TYPOGRAPHY.meta, color: COLORS_DARK.textSecondary, flexShrink: 0 },
         }}
       />
       {error && <Text accessibilityRole="alert" style={{ ...TYPOGRAPHY.bodySmall, color: colors.error }}>{error}</Text>}
-      <Button
-        title="Picture in picture"
-        variant="ghost"
-        size="small"
-        disabled={!loaded}
-        onPress={async () => {
-          try {
-            await player.current?.enterPictureInPicture();
-          } catch {
-            setError('Picture in picture is not available on this device.');
-          }
-        }}
-      />
+
     </View>
   );
 }
