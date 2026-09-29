@@ -52,6 +52,9 @@ class ImageGenerationService {
 
   private readonly listeners: Set<ImageGenerationListener> = new Set();
   private cancelRequested: boolean = false;
+  // UI cancellation can precede native load/enhancement completion. This promise
+  // owns admission until that work settles; it is not another UI phase.
+  private pendingGeneration: Promise<GeneratedImage | null> | null = null;
   private remoteRequest: AbortController | null = null;
   /** Last generate request, so a failure card's Retry button can re-run it. */
   private _lastParams: GenerateImageParams | null = null;
@@ -195,6 +198,10 @@ class ImageGenerationService {
       );
       return true;
     } catch (error: any) {
+      if (this.cancelRequested) {
+        this.resetState();
+        return false;
+      }
       // Pass the TYPED error as `cause` — an OverridableMemoryError here is what lets
       // the failure card offer "Load Anyway". Stringifying it (as before) hid it.
       this._fail(
@@ -327,18 +334,28 @@ class ImageGenerationService {
    * Generate an image. Runs independently of UI lifecycle.
    * If conversationId is provided, the result will be added as a chat message.
    */
-  async generateImage(
+  generateImage(
     params: GenerateImageParams,
     opts?: { override?: boolean },
   ): Promise<GeneratedImage | null> {
     // Native cancellation can finish after the UI has cleared its progress.
     // Keep admission closed until the engine's generation promise settles.
-    if (isInFlight(this.state.phase) || onnxImageGeneratorService.isGenerating()) {
+    if (this.pendingGeneration || isInFlight(this.state.phase) || onnxImageGeneratorService.isGenerating()) {
       logger.log(
         '[ImageGenerationService] Already generating, ignoring request',
       );
-      return null;
+      return Promise.resolve(null);
     }
+    this.pendingGeneration = this.runImageGeneration(params, opts).finally(() => {
+      this.pendingGeneration = null;
+    });
+    return this.pendingGeneration;
+  }
+
+  private async runImageGeneration(
+    params: GenerateImageParams,
+    opts?: { override?: boolean },
+  ): Promise<GeneratedImage | null> {
     this.cancelRequested = false;
     this._lastParams = params; // so a failure card's Retry can re-run this exact request
     const remoteServer = useRemoteServerStore
