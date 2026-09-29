@@ -1,5 +1,5 @@
 import { CATALOG } from '@offgrid/models';
-import { DownloadedModel } from '../types';
+import type { DownloadedModel, GeneratedVideo, GenerationMeta } from '../types';
 
 export const getMmProjFileSize = (m?: DownloadedModel): number =>
   m?.engine === 'llama' ? (m.mmProjFileSize ?? 0) : 0;
@@ -18,3 +18,14 @@ export const isLiteRTFileName = (fileName: string): boolean =>
 /** Use the catalog label without changing the repository ID or file names. */
 export const videoModelDisplayName = (id: string, fallback: string = id): string =>
   CATALOG.find(model => model.kind === 'video' && model.id === id)?.name ?? fallback;
+
+/** Generation facts shared by new messages and older saved video attachments. */
+export const videoGenerationMeta = (video: GeneratedVideo): GenerationMeta => ({
+  modelName: videoModelDisplayName(video.modelId),
+  resolution: `${video.width} × ${video.height}`,
+  steps: video.steps,
+  guidanceScale: video.guidance,
+  frames: video.frames,
+  fps: video.fps,
+  seed: video.seed,
+});

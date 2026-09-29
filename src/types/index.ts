@@ -249,12 +249,15 @@ export interface GenerationMeta {
   contextEstimate?: boolean;
   /** Model load/init time in seconds */
   modelLoadTimeSeconds?: number;
-  /** Image generation steps */
+  /** Image or video generation steps */
   steps?: number;
-  /** Image guidance scale */
+  /** Image or video guidance scale */
   guidanceScale?: number;
-  /** Image resolution */
+  /** Image or video resolution */
   resolution?: string;
+  frames?: number;
+  fps?: number;
+  seed?: number;
   cacheType?: string; // KV cache quantization type
   /** Tool names sent to the model for this turn (built-in + routed MCP/ext tools). */
   routedToolNames?: string[];

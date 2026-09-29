@@ -1,3 +1,4 @@
+import { videoGenerationMeta } from '../utils/modelHelpers';
 import { resolveDocumentPath } from '../utils/resolveDocumentPath';
 import logger from '../utils/logger';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -144,6 +145,7 @@ class VideoGenerationService {
           },
         ],
         generationTimeMs: Date.now() - startedAt,
+        generationMeta: videoGenerationMeta(result),
       });
   }
   async deleteVideo(id: string): Promise<void> {

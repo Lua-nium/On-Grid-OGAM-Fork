@@ -1,3 +1,5 @@
+import { useAppStore } from '../../stores';
+import { videoGenerationMeta } from '../../utils/modelHelpers';
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Clipboard } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
@@ -211,6 +213,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onLongPress,
   onMenuOpen,
 }) => {
+  const savedVideo = useAppStore(state =>
+    message.role === 'assistant'
+      ? state.generatedVideos.find(video =>
+          message.attachments?.some(attachment =>
+            attachment.type === 'video' && attachment.id === video.id,
+          ),
+        )
+      : undefined,
+  );
+  const generationMeta = savedVideo
+    ? { ...videoGenerationMeta(savedVideo), ...message.generationMeta }
+    : message.generationMeta;
   const timelineHasThinking = Boolean(
     message.timeline?.some(entry => entry.kind === 'thinking'),
   );
@@ -382,10 +396,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         </View>
       )}
 
-      {showTurnFooter && showGenerationDetails && message.generationMeta && (
+      {showTurnFooter && showGenerationDetails && generationMeta && (
         <GenerationMeta
           messageId={message.id}
-          generationMeta={message.generationMeta}
+          generationMeta={generationMeta}
           styles={styles}
           colors={colors}
         />
