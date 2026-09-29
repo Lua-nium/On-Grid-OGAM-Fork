@@ -16,6 +16,13 @@ PATCH="$ROOT/scripts/video/android-vulkan-dispatch.patch"
 if ! git -C "$SOURCE/ggml" apply --reverse --check "$PATCH" 2>/dev/null; then
   git -C "$SOURCE/ggml" apply "$PATCH"
 fi
+for entry in "ggml:android-hexagon.patch" ".:android-hardware-fallback.patch" ".:conditioning-errors.patch"; do
+  target="${entry%%:*}"
+  patch="$ROOT/scripts/video/${entry#*:}"
+  if ! git -C "$SOURCE/$target" apply --reverse --check "$patch" 2>/dev/null; then
+    git -C "$SOURCE/$target" apply "$patch"
+  fi
+done
 # Match the header versions used by the runtime's Vulkan build. These are build
 # inputs only; the device still supplies its Vulkan driver.
 prepare_headers() {
@@ -31,6 +38,7 @@ prepare_headers Vulkan-Headers 19725e4d48082fe78e26622b15d3080ccd54112b
 
 if [ "${1:-}" = "--android" ]; then
   bash "$ROOT/scripts/video/build-shaderc.sh"
+  bash "$ROOT/scripts/video/build-hexagon.sh"
 fi
 
 touch "$ROOT/.video-build/runtime-ready"

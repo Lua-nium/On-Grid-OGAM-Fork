@@ -1,0 +1,44 @@
+diff --git a/src/core/compute_workspace.cpp b/src/core/compute_workspace.cpp
+index 54f0538..ae344c9 100644
+--- a/src/core/compute_workspace.cpp
++++ b/src/core/compute_workspace.cpp
+@@ -18,6 +18,7 @@ namespace sd {
+         segment_end();
+         release();
+         ggml_backend_free(cpu_backend_);
++        ggml_backend_free(gpu_fallback_);
+     }
+ 
+     void ComputeWorkspace::set_extra_backends(const std::vector<ggml_backend_t>& backends) {
+@@ -43,6 +44,19 @@ namespace sd {
+     ggml_backend_sched_t ComputeWorkspace::make_scheduler(size_t graph_size) {
+         std::vector<ggml_backend_t> backends{backend_};
+         backends.insert(backends.end(), extra_backends_.begin(), extra_backends_.end());
++#ifdef __ANDROID__
++        // Hexagon is preferred; unsupported operations go to Vulkan, then CPU.
++        if (sd_backend_is(backend_, "HTP")) {
++            if (gpu_fallback_ == nullptr) {
++                auto device = ggml_backend_dev_by_name("Vulkan0");
++                if (device) gpu_fallback_ = ggml_backend_dev_init(device, nullptr);
++            }
++            if (gpu_fallback_ != nullptr &&
++                std::find(backends.begin(), backends.end(), gpu_fallback_) == backends.end()) {
++                backends.push_back(gpu_fallback_);
++            }
++        }
++#endif
+         if (!sd_backend_is_cpu(backend_)) {
+             if (cpu_backend_ == nullptr) {
+                 cpu_backend_ = sd_backend_cpu_init();
+diff --git a/src/core/compute_workspace.h b/src/core/compute_workspace.h
+index fcf14b8..203d62c 100644
+--- a/src/core/compute_workspace.h
++++ b/src/core/compute_workspace.h
+@@ -17,6 +17,7 @@ namespace sd {
+         ggml_backend_t backend_;
+         std::vector<ggml_backend_t> extra_backends_;
+         ggml_backend_t cpu_backend_     = nullptr;
++        ggml_backend_t gpu_fallback_    = nullptr;
+         ggml_gallocr_t allocator_       = nullptr;
+         ggml_backend_sched_t scheduler_ = nullptr;
+         size_t scheduler_capacity_      = 0;
