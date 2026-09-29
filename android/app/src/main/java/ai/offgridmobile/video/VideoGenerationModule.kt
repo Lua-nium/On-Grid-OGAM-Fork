@@ -150,11 +150,13 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
                 }
                 check(destination.length() > 0) { "Video encoder produced no file." }
                 terminal = mapOf("phase" to "succeeded")
-                promise.resolve(Arguments.createMap().apply { putString("path", destination.path) })
+                if (context.hasActiveReactInstance())
+                    promise.resolve(Arguments.createMap().apply { putString("path", destination.path) })
             } catch (error: Throwable) {
                 val code = if (cancelled.get()) "VIDEO_CANCELLED" else "VIDEO_FAILED"
                 terminal = mapOf("phase" to "failed", "code" to code, "error" to (error.message ?: "Video generation failed."))
-                output?.delete(); promise.reject(code, error.message, error)
+                output?.delete()
+                if (context.hasActiveReactInstance()) promise.reject(code, error.message, error)
             } finally {
                 keepVideoScreenAwake(false)
                 encoder = null; previewFile = null; VideoGenerationService.cancel = null
