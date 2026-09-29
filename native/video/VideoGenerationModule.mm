@@ -24,6 +24,8 @@ static BOOL OGSaveRgbPng(const sd_image_t &image, NSString *output) {
   dispatch_queue_t _worker;
   BOOL _busy;
   BOOL _listeners;
+  BOOL _holdsIdleTimer;
+  BOOL _previousIdleTimerDisabled;
   NSString *_videoInterruptionReason;
   BGTask *_continued;
   NSString *_taskIdentifier;
@@ -40,13 +42,31 @@ RCT_EXPORT_MODULE(VideoGenerationModule)
   }
   return self;
 }
-- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
+- (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  if (_holdsIdleTimer) {
+    BOOL previous = _previousIdleTimerDisabled;
+    dispatch_async(dispatch_get_main_queue(), ^{ UIApplication.sharedApplication.idleTimerDisabled = previous; });
+  }
+}
+- (void)keepScreenAwake {
+  if (_holdsIdleTimer) return;
+  _previousIdleTimerDisabled = UIApplication.sharedApplication.idleTimerDisabled;
+  _holdsIdleTimer = YES;
+  UIApplication.sharedApplication.idleTimerDisabled = YES;
+}
+- (void)restoreScreenIdleTimer {
+  if (!_holdsIdleTimer) return;
+  UIApplication.sharedApplication.idleTimerDisabled = _previousIdleTimerDisabled;
+  _holdsIdleTimer = NO;
+}
 - (NSArray<NSString *> *)supportedEvents { return @[@"VideoGenerationProgress", @"SDImageProgress"]; }
 - (void)startObserving { _listeners = YES; }
 - (void)stopObserving { _listeners = NO; }
 - (void)backgrounded {
   // Metal work must stop before the OS removes GPU access. Continued GPU tasks
   // are admitted separately by the background coordinator on supported systems.
+  NSLog(@"[VideoLifecycle] background busy=%d admittedGPU=%d", _busy, _continued != nil);
   if (_busy && !_continued) {
     _videoInterruptionReason = @"Video generation stopped when the app went into the background. Keep Off Grid open and try again.";
     _runtime.cancel();
@@ -82,6 +102,7 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
     if (self->_busy) { reject(@"VIDEO_BUSY", @"Video generation is already running.", nil); return; }
     self->_busy = YES; self->_runtime.cancelled.store(false);
     self->_videoInterruptionReason = nil;
+    [self keepScreenAwake];
     [self startContinuedWork:^{
     dispatch_async(self->_worker, ^{
       @autoreleasepool {
@@ -129,6 +150,7 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
         }
         dispatch_async(dispatch_get_main_queue(), ^{
           self->_busy = NO;
+          [self restoreScreenIdleTimer];
           if (self->_continued) {
             [self->_continued setTaskCompletedWithSuccess:failure == nil]; self->_continued = nil;
           }
@@ -182,6 +204,7 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
   dispatch_async(dispatch_get_main_queue(), ^{
     if (self->_busy) { reject(@"IMAGE_BUSY", @"Image or video generation is running.", nil); return; }
     self->_busy = YES; self->_runtime.cancelled.store(false);
+    [self keepScreenAwake];
     dispatch_async(self->_worker, ^{
       @autoreleasepool {
         NSString *output = input[@"outputPath"];
@@ -208,6 +231,7 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
         }
         dispatch_async(dispatch_get_main_queue(), ^{
           self->_busy = NO;
+          [self restoreScreenIdleTimer];
           if (failure) reject(@"IMAGE_FAILED", failure, nil);
           else resolve(@{@"id":input[@"id"], @"imagePath":output, @"width":input[@"width"], @"height":input[@"height"], @"seed":input[@"seed"]});
         });
@@ -218,7 +242,9 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
 - (void)startContinuedWork:(dispatch_block_t)work {
   _continuedWork = [work copy];
   if (@available(iOS 26.0, *)) {
-    if (BGTaskScheduler.supportedResources & BGContinuedProcessingTaskRequestResourcesGPU) {
+    BGContinuedProcessingTaskRequestResources resources = BGTaskScheduler.supportedResources;
+    NSLog(@"[VideoLifecycle] supportedBackgroundResources=%lu gpu=%d", (unsigned long)resources, (resources & BGContinuedProcessingTaskRequestResourcesGPU) != 0);
+    if (resources & BGContinuedProcessingTaskRequestResourcesGPU) {
       if (!_taskIdentifier) {
         _taskIdentifier = [NSString stringWithFormat:@"%@.video.generation", NSBundle.mainBundle.bundleIdentifier];
         __weak VideoGenerationModule *weakSelf = self;
@@ -226,11 +252,13 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
           VideoGenerationModule *owner = weakSelf;
           if (!owner || !owner->_busy) { [task setTaskCompletedWithSuccess:NO]; return; }
           owner->_continued = task;
+          NSLog(@"[VideoLifecycle] admitted continued GPU task %@", task.identifier);
           __weak BGTask *expiringTask = task;
           task.expirationHandler = ^{
             dispatch_async(dispatch_get_main_queue(), ^{
               VideoGenerationModule *active = weakSelf;
               if (active && active->_continued == expiringTask && active->_busy) {
+                NSLog(@"[VideoLifecycle] continued GPU task expired %@", expiringTask.identifier);
                 active->_videoInterruptionReason = @"iOS stopped background video generation. Keep Off Grid open and try again.";
                 active->_runtime.cancel();
               }
@@ -239,14 +267,21 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
           dispatch_block_t admitted = owner->_continuedWork; owner->_continuedWork = nil;
           if (admitted) admitted();
         }];
+        NSLog(@"[VideoLifecycle] registration %@ success=%d", _taskIdentifier, registered);
         if (!registered) { _taskIdentifier = nil; _continuedWork = nil; work(); return; }
       }
       BGContinuedProcessingTaskRequest *request = [[BGContinuedProcessingTaskRequest alloc] initWithIdentifier:_taskIdentifier title:@"Generating video" subtitle:@"Loading model"];
       request.requiredResources = BGContinuedProcessingTaskRequestResourcesGPU;
       request.strategy = BGContinuedProcessingTaskRequestSubmissionStrategyFail;
-      if ([BGTaskScheduler.sharedScheduler submitTaskRequest:request error:nil]) return;
+      NSError *submissionError = nil;
+      if ([BGTaskScheduler.sharedScheduler submitTaskRequest:request error:&submissionError]) {
+        NSLog(@"[VideoLifecycle] submitted continued GPU task %@", _taskIdentifier);
+        return;
+      }
+      NSLog(@"[VideoLifecycle] continued GPU task refused domain=%@ code=%ld detail=%@", submissionError.domain, (long)submissionError.code, submissionError.localizedDescription);
     }
   }
+  NSLog(@"[VideoLifecycle] running in foreground without admitted background GPU access");
   _continuedWork = nil;
   work();
 }
