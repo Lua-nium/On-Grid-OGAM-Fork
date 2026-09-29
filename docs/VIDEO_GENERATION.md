@@ -3,10 +3,11 @@
 ## Current engine
 
 Local generation uses stable-diffusion.cpp at the revision in
-`scripts/video/revision`. The first supported architecture is Wan 2.1 T2V 1.3B.
-A complete pack has the diffusion weight, Wan VAE, and UMT5 text encoder. Models
-uses the shared Hugging Face search and pack resolver. LTX and Hunyuan catalog
-entries state that this build does not support them.
+`scripts/video/revision`. Models uses the shared Hugging Face search, catalog,
+and architecture-specific pack resolver. The catalog currently includes Wan 2.1,
+Wan 2.2, LTX-2.3, LTX-2.5, and HunyuanVideo 1.5. Each pack must include every
+required weight, encoder, VAE, and connector file. Catalog availability is not
+proof that a model fits or has completed generation on a particular phone.
 
 Video request validation and settings keys live in `@offgrid/models`. Mobile's
 video generation service owns local and OGAD jobs, progress, cancellation,
@@ -20,13 +21,13 @@ CocoaPods builds the pinned iOS framework during `pod install`. Gradle prepares 
 
 ```sh
 bash scripts/prepare-video-runtime.sh
-bash scripts/build-video-ios.sh
+OFFGRID_IOS_DEVICE_ONLY=1 bash scripts/build-video-ios.sh
 (cd ios && pod install)
 ```
 
-The iOS framework includes arm64 device and arm64 simulator slices. Use an Apple
-Silicon simulator. Building requires an Xcode SDK with the iOS 26 background task
-APIs. Deployment remains iOS 17; older iOS versions run video in the foreground.
+The command above builds the physical arm64 iPhone framework only. Pass
+`OFFGRID_IOS_DEVICE_ONLY=1` to the physical Xcode build as well. Building requires
+an Xcode SDK with the iOS 26 background task APIs. Deployment remains iOS 17.
 
 For Android, install CMake, Make, Python 3, and the project's Android SDK/NDK:
 
@@ -59,6 +60,28 @@ a second job. Settings and model selection can change while a saved request
 retains its resolved generation parameters.
 
 Only OGAD remote video servers are supported. REST and MCP share OGAD's video
-job owner. Model transfer sends and checks all three pack files before
-registration. Tests have not been added or run for this implementation; manual
-verification comes first.
+job owner. Model transfer sends and checks every file in the selected pack
+before registration. Cancel and retry use the shared package transaction and
+rollback. Local download resume preserves complete files; an incomplete file can
+restart after process death.
+
+## Integration audit (2026-09-29)
+
+- Storage reads actual sizes for all installed video pack files, including old
+  records whose catalog size is missing. Download completion stores actual sizes.
+- Auto Configure includes video only when the native runtime, complete catalog
+  pack, RAM minimum, and existing memory budget allow it. Models below these
+  limits remain manually selectable; automatic setup does not use Run Anyway.
+- iOS excludes downloaded/transferred video model folders from device backups,
+  as it does for text and image models. SD image packs use `image_models` and its
+  existing exclusion. Android disables app backup in its manifest. Generated
+  videos and user content are not excluded by this model-cache policy.
+- Remote video requires OGAD. Local and remote labels use the shared catalog,
+  while model IDs and per-model settings keys remain unchanged.
+- Native progress changes and background admission details enter the app debug
+  log. A heartbeat alone is not proof that a sampling step advanced.
+
+Source checks cover these integrations. Device checks for the latest backup
+exclusion and Auto Configure changes remain pending. Complete video quality and
+all-model coverage are not established by successful builds or partial sampling.
+No automated tests were added or run for this audit.
