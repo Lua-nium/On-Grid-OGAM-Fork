@@ -71,6 +71,7 @@ async function start(model: ModelEntry): Promise<void> {
   );
   try {
     await RNFS.mkdir(directory);
+    await backgroundDownloadService.excludeFromBackup(directory);
     for (const file of model.files) {
       if (transfer.paused)
         await new Promise<void>(resolve => {
