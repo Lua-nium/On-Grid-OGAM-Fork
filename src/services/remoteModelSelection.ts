@@ -1,3 +1,4 @@
+import { videoModelDisplayName } from '../utils/modelHelpers';
 import type {
   RemoteModelCategory,
   RemoteModelOption,
@@ -38,6 +39,9 @@ export function remoteServerModelOptions(
         reported.length > 0 ? reported : configuredOption(server, category);
       return options.map(option => ({
         ...option,
+        name: category === 'video'
+          ? videoModelDisplayName(option.id, option.name)
+          : option.name,
         serverId: server.id,
         serverName: server.name,
       }));
@@ -50,8 +54,8 @@ export function selectedRemoteModelName(
 ): string | null {
   const selectedId = server?.mediaModels?.[category]?.trim();
   if (!server || !selectedId) return null;
-  return (
+  const name =
     server.modelCatalog?.[category]?.find(model => model.id === selectedId)
-      ?.name ?? displayModelName(selectedId)
-  );
+      ?.name ?? displayModelName(selectedId);
+  return category === 'video' ? videoModelDisplayName(selectedId, name) : name;
 }

@@ -1,3 +1,4 @@
+import { CATALOG } from '@offgrid/models';
 import { DownloadedModel } from '../types';
 
 export const getMmProjFileSize = (m?: DownloadedModel): number =>
@@ -13,3 +14,7 @@ export const getMmProjFileSize = (m?: DownloadedModel): number =>
  */
 export const isLiteRTFileName = (fileName: string): boolean =>
   fileName.toLowerCase().endsWith('.litertlm');
+
+/** Use the catalog label without changing the repository ID or file names. */
+export const videoModelDisplayName = (id: string, fallback: string = id): string =>
+  CATALOG.find(model => model.kind === 'video' && model.id === id)?.name ?? fallback;

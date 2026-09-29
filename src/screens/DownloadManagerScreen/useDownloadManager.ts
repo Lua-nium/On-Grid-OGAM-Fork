@@ -1,3 +1,4 @@
+import { videoModelDisplayName } from '../../utils/modelHelpers';
 import { useState } from 'react';
 import {
   AlertState,
@@ -157,8 +158,8 @@ export function useDownloadManager(): UseDownloadManagerResult {
       type: 'completed' as const,
       modelType: 'video' as const,
       modelId: model.id,
-      fileName: model.name,
-      name: model.name,
+      fileName: videoModelDisplayName(model.id, model.name),
+      name: videoModelDisplayName(model.id, model.name),
       author: model.org ?? '',
       quantization: model.quant ?? '',
       fileSize: model.files.reduce(

@@ -1,3 +1,4 @@
+import { videoModelDisplayName } from '../../utils/modelHelpers';
 import { RemoteModelOptionsSection } from '../models/RemoteModelOptionsSection';
 import { remoteServerManager } from '../../services/remoteServerManager';
 import React from 'react';
@@ -23,7 +24,7 @@ export function VideoTab({ onSelect }: { onSelect: () => void }) {
         <ModelCard
           key={model.id}
           compact
-          model={{ id: model.id, name: model.name, author: model.org ?? '' }}
+          model={{ id: model.id, name: videoModelDisplayName(model.id, model.name), author: model.org ?? '' }}
           isDownloaded
           isActive={selected === model.id}
           facts={['Video', 'Loads when generation starts']}

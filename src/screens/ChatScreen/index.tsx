@@ -1,3 +1,4 @@
+import { videoModelDisplayName } from '../../utils/modelHelpers';
 import { useAppStore } from '../../stores/appStore';
 import React, { useEffect, useRef, useState } from 'react';
 import { FlatList, Keyboard, Platform } from 'react-native';
@@ -77,11 +78,10 @@ export const ChatScreen: React.FC = () => {
   const voiceSummary = useUiModeStore(s => s.voiceSummary);
   const whisperModelId = useWhisperStore(s => s.downloadedModelId);
   const remoteLabels = useActiveRemoteModelLabels();
-  const videoLabel = useAppStore(
-    s =>
-      s.downloadedVideoModels.find(m => m.id === s.activeVideoModelId)?.name ??
-      '—',
-  );
+  const videoLabel = useAppStore(s => {
+    const model = s.downloadedVideoModels.find(m => m.id === s.activeVideoModelId);
+    return model ? videoModelDisplayName(model.id, model.name) : '—';
+  });
   const modelLabels: Record<ModelRowType, string> = {
     video: remoteLabels.video ?? videoLabel,
     text: chat.activeModelName ?? chat.activeModel?.name ?? '—',

@@ -1,3 +1,4 @@
+import { videoModelDisplayName } from '../../../utils/modelHelpers';
 import { mapStoreStatus } from '../storeStatus';
 import { modelResidencyManager } from '../../modelResidency';
 import RNFS from 'react-native-fs';
@@ -33,7 +34,7 @@ function addRow(model: ModelEntry, status: 'pending' | 'paused') {
       modelId: model.id,
       downloadId: key(model.id),
       modelType: 'video',
-      fileName: model.name,
+      fileName: videoModelDisplayName(model.id, model.name),
       totalBytes: model.files.reduce((sum, f) => sum + (f.sizeBytes ?? 0), 0),
       bytesDownloaded: 0,
       progress: 0,
@@ -155,7 +156,7 @@ export const videoProvider: DownloadProvider = {
       result.push({
         id: key(model.id),
         modelType: 'video',
-        name: model.name,
+        name: videoModelDisplayName(model.id, model.name),
         sizeBytes: row?.totalBytes ?? 0,
         bytesDownloaded: row?.bytesDownloaded ?? 0,
         progress: row?.progress ?? 0,
@@ -181,7 +182,7 @@ export const videoProvider: DownloadProvider = {
       result.push({
         id: key(model.id),
         modelType: 'video',
-        name: model.name,
+        name: videoModelDisplayName(model.id, model.name),
         sizeBytes: size,
         bytesDownloaded: size,
         progress: 1,

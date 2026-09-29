@@ -1,3 +1,4 @@
+import { videoModelDisplayName } from '../utils/modelHelpers';
 import type {
   ModelEntry,
   VideoGenerationRequestContract,
@@ -411,7 +412,7 @@ export const useAppStore = create<AppState>()(
         set(state => ({
           downloadedVideoModels: [
             ...state.downloadedVideoModels.filter(m => m.id !== model.id),
-            model,
+            { ...model, name: videoModelDisplayName(model.id, model.name) },
           ],
         })),
       removeDownloadedVideoModel: id =>
@@ -425,8 +426,12 @@ export const useAppStore = create<AppState>()(
       setVideoDownload: (id, model) =>
         set(state => {
           const videoDownloads = { ...state.videoDownloads };
-          if (model) videoDownloads[id] = model;
-          else delete videoDownloads[id];
+          if (model) {
+            videoDownloads[id] = {
+              ...model,
+              name: videoModelDisplayName(model.id, model.name),
+            };
+          } else delete videoDownloads[id];
           return { videoDownloads };
         }),
       downloadedImageModels: [],

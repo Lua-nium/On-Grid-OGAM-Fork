@@ -1,3 +1,4 @@
+import { videoModelDisplayName } from '../../utils/modelHelpers';
 import React, { useCallback, useEffect, useState } from 'react';
 import { BackHandler, ScrollView, Text, TextInput, View } from 'react-native';
 import {
@@ -192,7 +193,7 @@ export const VideoModelsTab: React.FC<{
         compact
         model={{
           id: row.id,
-          name: file ? `${row.name.replace(/\s*\([^)]*\)$/, '')} - ${versionName}` : row.name,
+          name: file ? `${videoModelDisplayName(row.id, row.name).replace(/\s*\([^)]*\)$/, '')} - ${versionName}` : videoModelDisplayName(row.id, row.name),
           author: row.org,
           credibility: {
             source:
@@ -287,7 +288,7 @@ export const VideoModelsTab: React.FC<{
     <View style={styles.flex1}>
       {selected ? (
         <>
-          <ScreenHeader title={selected.name} onBack={() => setSelected(null)} />
+          <ScreenHeader title={videoModelDisplayName(selected.id, selected.name)} onBack={() => setSelected(null)} />
           <Card style={styles.modelInfoCard}>
             <Text style={styles.modelAuthor}>{selected.org}</Text>
             <Text style={styles.modelDescription}>

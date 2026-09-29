@@ -1,3 +1,4 @@
+import { videoModelDisplayName } from '../../utils/modelHelpers';
 import { useAppStore } from '../../stores/appStore';
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
@@ -114,9 +115,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const voiceSummary = useUiModeStore(s => s.voiceSummary);
   const remoteLabels = useActiveRemoteModelLabels();
 
-  const videoLabel = useAppStore(
-    s => s.downloadedVideoModels.find(m => m.id === s.activeVideoModelId)?.name,
-  );
+  const videoLabel = useAppStore(s => {
+    const model = s.downloadedVideoModels.find(m => m.id === s.activeVideoModelId);
+    return model ? videoModelDisplayName(model.id, model.name) : undefined;
+  });
   const modelLabels = homeModelLabels({
     video: remoteLabels.video ?? videoLabel,
     text: activeTextModelId ? activeTextModelName : undefined,

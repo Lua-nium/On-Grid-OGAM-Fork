@@ -1,3 +1,4 @@
+import { videoModelDisplayName } from '../../utils/modelHelpers';
 import { Accordion } from '../Accordion';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import React, { useEffect, useState } from 'react';
@@ -73,7 +74,11 @@ export const VideoGenerationSection: React.FC = () => {
   return (
     <Accordion title="Video generation" variant="plain">
       <Text style={styles.settingDescription}>
-        {remoteName ?? model?.name ?? 'Default video settings'}
+        {remoteName
+          ? videoModelDisplayName(remoteName)
+          : model
+          ? videoModelDisplayName(model.id, model.name)
+          : 'Default video settings'}
       </Text>
       {controls.map(control => (
         <SliderSetting
