@@ -45,6 +45,7 @@ const EMPTY: VideoGenerationJobContract = {
   stage: null,
   enhancedPrompt: '',
   progress: null,
+  preview: null,
   outputPath: null,
   error: null,
   startedAt: null,
@@ -373,6 +374,7 @@ class VideoGenerationService {
             },
             onProgress: (progress, stage) =>
               this.update({ stage: stage ?? 'generating', progress }),
+            onPreview: preview => this.update({ preview }),
           },
         );
         path = remote.path;
@@ -470,6 +472,8 @@ class VideoGenerationService {
         throw error;
       }
     } finally {
+      this.update({ preview: null });
+      await RNFS.unlink(`${output}.preview.png`).catch(() => {});
       if (registration) modelResidencyManager.unregister('video', registration);
       if (generationSession.isGeneratingFor(input.conversationId))
         generationSession.end('video-finished');

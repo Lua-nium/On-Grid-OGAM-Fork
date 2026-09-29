@@ -38,6 +38,12 @@ export const videoGenerator = {
         onUpdate({
           stage: event.stage,
           backend: event.backend ?? null,
+          ...(event.preview &&
+          event.preview.path === `${outputPath}.preview.png` &&
+          Number.isFinite(event.preview.width) && event.preview.width > 0 &&
+          Number.isFinite(event.preview.height) && event.preview.height > 0
+            ? { preview: event.preview }
+            : {}),
           progress:
             event.total > 0 ? { step: event.step, total: event.total } : null,
         });

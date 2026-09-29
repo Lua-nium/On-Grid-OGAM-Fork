@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
+import { FadeInImage } from './ChatMessage/components/MessageAttachments';
 import { videoGenerationService } from '../services/videoGenerationService';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
@@ -41,12 +42,14 @@ export function VideoGenerationStatus({
         : 'Processing prompt'
       : state.stage === 'encoding'
       ? 'Saving video'
-      : samplingFinished
+      : state.stage === 'decoding' || samplingFinished
       ? 'Decoding video frames'
       : 'Generating video';
   const steps =
     state.stage === 'generating' && state.progress && !samplingFinished
       ? ` · Step ${state.progress.step} of ${state.progress.total}`
+      : state.stage === 'decoding' && state.progress
+      ? ` · Section ${state.progress.step} of ${state.progress.total} complete`
       : '';
   const seconds = Math.max(
     0,
@@ -54,19 +57,32 @@ export function VideoGenerationStatus({
   );
   const elapsed = `${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed`;
   return (
-    <Text
-      accessibilityLiveRegion="polite"
-      accessibilityLabel={`${label}${steps}`}
-      style={{
-        ...TYPOGRAPHY.bodySmall,
-        color: colors.textSecondary,
-        marginHorizontal: SPACING.lg,
-        marginBottom: SPACING.sm,
-      }}
-    >
-      {label}
-      {steps}
-      {` · ${elapsed}`}
-    </Text>
+    <View style={{ marginHorizontal: SPACING.lg, marginBottom: SPACING.sm }}>
+      {state.preview && (
+        <View style={{ marginBottom: SPACING.sm }}>
+          <FadeInImage
+            key={state.preview.path}
+            uri={`file://${state.preview.path}`}
+            imageStyle={{
+              width: '100%',
+              aspectRatio: state.preview.width / state.preview.height,
+            }}
+            accessibilityLabel="First decoded video frame"
+          />
+        </View>
+      )}
+      <Text
+        accessibilityLiveRegion="polite"
+        accessibilityLabel={`${label}${steps}`}
+        style={{
+          ...TYPOGRAPHY.bodySmall,
+          color: colors.textSecondary,
+        }}
+      >
+        {label}
+        {steps}
+        {` · ${elapsed}`}
+      </Text>
+    </View>
   );
 }

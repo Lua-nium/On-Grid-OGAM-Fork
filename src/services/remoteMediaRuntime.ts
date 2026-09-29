@@ -1,11 +1,13 @@
 import { isRecordProvenance, type RecordProvenance } from '@offgrid/sync';
 import { generateId } from '../utils/generateId';
 import RNFS from 'react-native-fs';
+import { Buffer } from 'buffer';
 import type {
   ResolvedVideoRequest,
   VideoGenerationResultContract,
   VideoGenerationProgressContract,
   VideoGenerationStage,
+  VideoGenerationUpdateContract,
 } from '@offgrid/models';
 import { remoteServerManager } from './remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../types';
@@ -117,6 +119,7 @@ export const remoteMediaRuntime = {
         progress: VideoGenerationProgressContract | null,
         stage?: VideoGenerationStage,
       ) => void;
+      onPreview?: (preview: NonNullable<VideoGenerationUpdateContract['preview']>) => void;
     },
   ): Promise<
     VideoGenerationResultContract & { provenance?: RecordProvenance }
@@ -158,6 +161,10 @@ export const remoteMediaRuntime = {
       ).catch(() => {});
     };
     options.signal.addEventListener('abort', cancel, { once: true });
+    const previewController = new AbortController();
+    const stopPreview = () => previewController.abort();
+    options.signal.addEventListener('abort', stopPreview, { once: true });
+    let previewRequest: Promise<void> | undefined;
     try {
       if (options.signal.aborted) {
         cancel();
@@ -176,6 +183,7 @@ export const remoteMediaRuntime = {
               status: string;
               stage?: VideoGenerationStage;
               progress?: { step: number; total: number };
+              preview?: { width: number; height: number };
               error?: { message: string };
               result?: VideoGenerationResultContract & {
                 provenance?: RecordProvenance;
@@ -187,10 +195,32 @@ export const remoteMediaRuntime = {
             ? state.progress
             : null;
         const stage =
-          state.stage && ['enhancing', 'preparing', 'conditioning', 'generating', 'encoding'].includes(state.stage)
+          state.stage && ['enhancing', 'preparing', 'conditioning', 'generating', 'decoding', 'encoding'].includes(state.stage)
             ? state.stage
             : undefined;
         if (progress || stage) options.onProgress(progress, stage);
+        if (!previewRequest && options.onPreview && state.preview &&
+          Number.isFinite(state.preview.width) && state.preview.width > 0 &&
+          Number.isFinite(state.preview.height) && state.preview.height > 0) {
+          const dimensions = state.preview;
+          // Fetch only this job's authenticated route, never a URL from server metadata.
+          // Preview transfer must not delay job polling or final video delivery.
+          const timeout = setTimeout(stopPreview, 5000);
+          previewRequest = request({
+            server,
+            path: `/v1/videos/${encodeURIComponent(job.request_id)}/preview`,
+            signal: previewController.signal,
+            init: { method: 'GET', headers: { Accept: 'image/png' } },
+          }, async response => {
+            const bytes = await response.arrayBuffer();
+            if (bytes.byteLength === 0 || bytes.byteLength > 8 * 1024 * 1024) return;
+            const path = `${outputPath}.preview.png`;
+            await RNFS.writeFile(path, Buffer.from(bytes).toString('base64'), 'base64');
+            if (!previewController.signal.aborted) options.onPreview?.({ path, width: dimensions.width, height: dimensions.height });
+          }).catch(() => {
+            // A missing or expired preview must not fail video generation.
+          }).finally(() => clearTimeout(timeout));
+        }
         if (state.status === 'failed' || state.status === 'cancelled')
           throw Object.assign(
             new Error(
@@ -249,6 +279,9 @@ export const remoteMediaRuntime = {
         });
       }
     } finally {
+      stopPreview();
+      await previewRequest;
+      options.signal.removeEventListener('abort', stopPreview);
       options.signal.removeEventListener('abort', cancel);
     }
   },

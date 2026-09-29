@@ -27,13 +27,14 @@ interface FadeInImageProps {
   testID?: string;
   wrapperTestID?: string;
   onPress?: () => void;
+  accessibilityLabel?: string;
 }
 
 function resolveMediaUri(uri: string): string {
   return uri.includes('/Documents/') ? `file://${resolveDocumentPath(uri)}` : uri;
 }
 
-function FadeInImage({ uri, imageStyle, testID, wrapperTestID, onPress }: FadeInImageProps) {
+export function FadeInImage({ uri, imageStyle, testID, wrapperTestID, onPress, accessibilityLabel }: FadeInImageProps) {
   const displayUri = resolveMediaUri(uri);
   const opacity = useSharedValue(0);
   const [loaded, setLoaded] = React.useState(false);
@@ -45,10 +46,11 @@ function FadeInImage({ uri, imageStyle, testID, wrapperTestID, onPress }: FadeIn
         testID={wrapperTestID}
         style={fadeInImageStyles.wrapper}
         onPress={onPress}
+        disabled={!onPress}
         activeOpacity={0.8}
-        accessibilityRole="button"
+        accessibilityRole={onPress ? 'button' : 'image'}
         accessibilityLabel={
-          isGeneratedImage ? `Generated image ${loaded ? 'loaded' : 'loading'}` : undefined
+          accessibilityLabel ?? (isGeneratedImage ? `Generated image ${loaded ? 'loaded' : 'loading'}` : undefined)
         }
       >
         <Image
