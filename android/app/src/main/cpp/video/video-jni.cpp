@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <android/log.h>
 #include <limits>
 #include "VideoRuntime.hpp"
 
@@ -27,7 +28,16 @@ static std::string string(JNIEnv *env, jstring value) {
   return result;
 }
 
-extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativePrepare(JNIEnv *, jobject) { runtime.cancelled.store(false); }
+extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativePrepare(JNIEnv *, jobject) {
+#ifndef NDEBUG
+  sd_set_log_callback([](sd_log_level_t level, const char *text, void *) {
+    const int priority = level == SD_LOG_ERROR ? ANDROID_LOG_ERROR :
+      level == SD_LOG_WARN ? ANDROID_LOG_WARN : ANDROID_LOG_DEBUG;
+    __android_log_write(priority, "OffgridVideo", text);
+  }, nullptr);
+#endif
+  runtime.cancelled.store(false);
+}
 extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeCancel(JNIEnv *, jobject) { runtime.cancel(); }
 extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeGenerate(
   JNIEnv *env, jobject self, jstring weight, jstring vae, jstring encoder, jstring prompt, jstring negative,

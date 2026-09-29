@@ -60,6 +60,12 @@ public:
       config.diffusion_flash_attn = true;
       config.auto_fit = true;
       config.eager_load = false;
+#ifdef __ANDROID__
+      // Vulkan cannot execute every T5 operation on preallocated encoder
+      // tensors. Keep conditioning on CPU; diffusion still selects the GPU.
+      config.backend = "te=cpu";
+      config.params_backend = "te=cpu";
+#endif
       config.n_threads = 4;
       auto loaded = new_sd_ctx(&config);
       {
