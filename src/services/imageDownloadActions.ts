@@ -181,6 +181,15 @@ async function downloadSequentialFiles(opts: {
     const filePath = `${modelDir}/${file.relativePath}`;
     const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
     await ensureDirectory(fileDir);
+    // Reuse a complete pinned part after a restart or device-to-device copy.
+    // Size alone cannot distinguish a valid model from corrupted bytes.
+    if (file.sha256 && (await statFile(filePath))?.size === file.size &&
+        (await RNFS.hash(filePath, 'sha256')).toLowerCase() === file.sha256.toLowerCase()) {
+      assertNotCancelled(modelInfo.id, runtime);
+      downloadedSize += file.size;
+      useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
+      continue;
+    }
 
     const tempFileName = `${modelInfo.id}_${file.relativePath.replaceAll('/', '_')}`;
     const capturedDownloadedSize = downloadedSize;
