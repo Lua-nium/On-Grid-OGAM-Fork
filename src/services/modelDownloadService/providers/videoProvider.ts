@@ -1,3 +1,4 @@
+import { mapStoreStatus } from '../storeStatus';
 import { modelResidencyManager } from '../../modelResidency';
 import RNFS from 'react-native-fs';
 import type { ModelEntry } from '@offgrid/models';
@@ -83,6 +84,7 @@ async function start(model: ModelEntry): Promise<void> {
         (!file.sha256 || (await RNFS.hash(destination, 'sha256')).toLowerCase() === file.sha256.toLowerCase())
       ) {
         bytes += file.sizeBytes;
+        useDownloadStore.getState().updateProgress(key(model.id), bytes, total);
         continue;
       }
       useDownloadStore.getState().setStatus(key(model.id), 'running');
@@ -91,6 +93,7 @@ async function start(model: ModelEntry): Promise<void> {
           url: file.url,
           fileName: `${encodeURIComponent(model.id)}_${file.name}`,
           modelId: key(model.id),
+          modelKey: key(model.id),
           modelType: 'video',
           totalBytes: file.sizeBytes,
           sha256: file.sha256,
@@ -115,6 +118,7 @@ async function start(model: ModelEntry): Promise<void> {
       bytes += Number((await RNFS.stat(destination)).size);
     }
     if (transfer.cancelled) throw new Error('Download cancelled.');
+    useDownloadStore.getState().setProcessing(key(model.id));
     await resolveVideoPack(model, true);
     const app = useAppStore.getState();
     app.addDownloadedVideoModel({
@@ -147,14 +151,7 @@ export const videoProvider: DownloadProvider = {
     const result: ModelDownload[] = [];
     for (const model of Object.values(useAppStore.getState().videoDownloads)) {
       const row = useDownloadStore.getState().downloads[key(model.id)];
-      const status: ModelDownloadStatus =
-        row?.status === 'running'
-          ? 'downloading'
-          : row?.status === 'pending'
-            ? 'queued'
-            : row?.status === 'failed'
-              ? 'error'
-              : 'paused';
+      const status: ModelDownloadStatus = row ? mapStoreStatus(row.status) : 'paused';
       result.push({
         id: key(model.id),
         modelType: 'video',
