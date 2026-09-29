@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { BackHandler, ScrollView, Text, TextInput, View } from 'react-native';
 import {
   CATALOG,
   searchHuggingFace,
@@ -10,7 +10,8 @@ import {
   videoVaeFilename,
 } from '@offgrid/models';
 import type { HFSearchResult, ModelFileVariant } from '@offgrid/models';
-import { ModelCard } from '../../components';
+import { useFocusEffect } from '@react-navigation/native';
+import { Card, ModelCard } from '../../components';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { LoadingDots } from '../../components/LoadingDots';
 import { useAppStore } from '../../stores';
@@ -21,12 +22,22 @@ import { modelDownloadService } from '../../services/modelDownloadService';
 import { useTheme, useThemedStyles } from '../../theme';
 import { createStyles } from './styles';
 
-export const VideoModelsTab: React.FC = () => {
+export const VideoModelsTab: React.FC<{
+  selected: HFSearchResult | null;
+  setSelected: React.Dispatch<React.SetStateAction<HFSearchResult | null>>;
+}> = ({ selected, setSelected }) => {
   const styles = useThemedStyles(createStyles),
     { colors } = useTheme();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<HFSearchResult[]>([]);
-  const [selected, setSelected] = useState<HFSearchResult | null>(null);
+  useFocusEffect(useCallback(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!selected) return false;
+      setSelected(null);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [selected, setSelected]));
   const [files, setFiles] = useState<ModelFileVariant[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -154,18 +165,11 @@ export const VideoModelsTab: React.FC = () => {
       ? `Compact ${precision}`
       : 'Alternative version';
     const memory = template?.minRamGb;
-    const memoryWarning =
-      memory && ramGB > 0 && ramGB < memory
-        ? 'May exceed available memory. Use an OGAD server for larger models.'
-        : undefined;
     const facts = [
       unavailable ? 'Not available in this app yet' : undefined,
-      totalBytes ? `${formatFileSize(totalBytes)} total download` : undefined,
-      memory ? `${memory} GB memory suggested` : undefined,
+      totalBytes ? `${formatFileSize(totalBytes)}${file ? '' : ' total download'}` : undefined,
+      !file && memory ? `${memory} GB memory suggested` : undefined,
       defaultVersion ? 'Default version' : undefined,
-      file && installed && !isDownloaded
-        ? 'Remove the installed version to change versions.'
-        : undefined,
     ].filter((fact): fact is string => !!fact);
     const open = () => {
       setError(null);
@@ -188,7 +192,7 @@ export const VideoModelsTab: React.FC = () => {
         compact
         model={{
           id: row.id,
-          name: file ? versionName : row.name,
+          name: file ? `${row.name.replace(/\s*\([^)]*\)$/, '')} - ${versionName}` : row.name,
           author: row.org,
           credibility: {
             source:
@@ -196,7 +200,7 @@ export const VideoModelsTab: React.FC = () => {
             isOfficial: row.credibility === 'official',
             isVerifiedQuantizer: row.credibility === 'verified-quantizer',
           },
-          description: unavailable
+          description: file ? undefined : unavailable
             ? catalogEntry?.availabilityNote
             : 'Create short, silent videos from a description.',
         }}
@@ -206,8 +210,6 @@ export const VideoModelsTab: React.FC = () => {
             <Text style={styles.modelDescription}>
               Checking downloaded files...
             </Text>
-          ) : memoryWarning ? (
-            <Text style={styles.modelDescription}>{memoryWarning}</Text>
           ) : undefined
         }
         isDownloaded={isDownloaded}
@@ -279,10 +281,31 @@ export const VideoModelsTab: React.FC = () => {
     );
   };
 
+  const selectedCatalog = defaults.find(model => model.id === selected?.id);
+  const selectedMemory = selectedCatalog?.minRamGb;
   return (
     <View style={styles.flex1}>
       {selected ? (
-        <ScreenHeader title={selected.name} onBack={() => setSelected(null)} />
+        <>
+          <ScreenHeader title={selected.name} onBack={() => setSelected(null)} />
+          <Card style={styles.modelInfoCard}>
+            <Text style={styles.modelAuthor}>{selected.org}</Text>
+            <Text style={styles.modelDescription}>
+              Create short, silent videos from a description.
+            </Text>
+            {selectedMemory ? <Text style={styles.statText}>
+              {selectedMemory} GB memory suggested{ramGB > 0 ? ` · This phone: ${Math.round(ramGB)} GB` : ''}
+            </Text> : null}
+            {selectedMemory && ramGB > 0 && ramGB < selectedMemory ?
+              <Text style={styles.statText}>Local generation may exceed available memory.</Text> : null}
+            {models.some(model => model.id === selected.id) ?
+              <Text style={styles.statText}>Remove the installed version to change versions.</Text> : null}
+          </Card>
+          <Text style={styles.sectionTitle}>Available versions</Text>
+          <Text style={styles.sectionSubtitle}>
+            Download one version. The total includes all required files.
+          </Text>
+        </>
       ) : (
         <View style={styles.searchContainer}>
           <TextInput
@@ -304,11 +327,6 @@ export const VideoModelsTab: React.FC = () => {
       >
         {selected ? (
           <>
-            <Text style={styles.sectionTitle}>Choose a version</Text>
-            <Text style={styles.sectionSubtitle}>
-              The total includes everything needed to create videos. Download
-              one version.
-            </Text>
             {[...files]
               .sort((a, b) => {
                 const primary = defaults

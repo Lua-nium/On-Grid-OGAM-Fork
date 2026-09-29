@@ -1,5 +1,6 @@
 import { VideoModelsTab } from './VideoModelsTab';
-import React, { useCallback, useRef } from 'react';
+import type { HFSearchResult } from '@offgrid/models';
+import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
@@ -58,6 +59,7 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const vm = useModelsScreen();
+  const [selectedVideoModel, setSelectedVideoModel] = useState<HFSearchResult | null>(null);
   // Pro fills this slot with the real voice-models panel (engine + downloads).
   // The Voice tab always renders; when the slot is empty (free / non-pro) we
   // show an upsell so users can see what Pro adds.
@@ -88,13 +90,15 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({
       return () => {
         didAutoSelect.current = false;
         vm.setSelectedModel(null);
+        setSelectedVideoModel(null);
         vm.setModelFiles([]);
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [route.params?.initialTab, route.params?.repairModelId]),
   );
 
-  const isShowingDetail = vm.activeTab === 'text' && vm.selectedModel !== null;
+  const isShowingDetail = (vm.activeTab === 'text' && vm.selectedModel !== null) ||
+    (vm.activeTab === 'video' && selectedVideoModel !== null);
 
   const content = (
     <>
@@ -225,7 +229,7 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({
       )}
 
       {/* Image Models Tab */}
-      {vm.activeTab === 'video' && <VideoModelsTab />}
+      {vm.activeTab === 'video' && <VideoModelsTab selected={selectedVideoModel} setSelected={setSelectedVideoModel} />}
       {vm.activeTab === 'image' && (
         <ImageModelsTab
           imageSearchQuery={vm.imageSearchQuery}
