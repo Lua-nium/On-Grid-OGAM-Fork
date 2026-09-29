@@ -312,6 +312,9 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
         logger.warn('[Image] SD load timed out; waiting for native cleanup');
         await nativeLoad.catch(() => {});
         if (!(await onnxImageGeneratorService.unloadModel())) {
+          // Cleanup failure is not proof that native memory was released. Keep
+          // the existing residency registration/eviction path responsible for it.
+          ctx.onLoaded(ctx.modelId, ctx.imageThreads);
           throw new Error('The timed-out image model could not be unloaded.');
         }
         modelResidencyManager.release('image');
