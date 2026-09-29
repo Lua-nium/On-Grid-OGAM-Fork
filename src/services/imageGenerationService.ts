@@ -301,7 +301,7 @@ class ImageGenerationService {
       });
     } catch (error: any) {
       const errorMsg = error?.message || 'Image generation failed';
-      if (errorMsg.includes('cancelled')) {
+      if (this.cancelRequested || errorMsg.includes('cancelled')) {
         this.resetState();
       } else {
         logger.error('[ImageGenerationService] Generation error:', error);
@@ -331,7 +331,9 @@ class ImageGenerationService {
     params: GenerateImageParams,
     opts?: { override?: boolean },
   ): Promise<GeneratedImage | null> {
-    if (isInFlight(this.state.phase)) {
+    // Native cancellation can finish after the UI has cleared its progress.
+    // Keep admission closed until the engine's generation promise settles.
+    if (isInFlight(this.state.phase) || onnxImageGeneratorService.isGenerating()) {
       logger.log(
         '[ImageGenerationService] Already generating, ignoring request',
       );
