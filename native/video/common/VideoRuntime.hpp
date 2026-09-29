@@ -82,9 +82,14 @@ public:
         }
       }
       config.backend = preferred.empty() ? "Vulkan0,te=cpu" : preferred.c_str();
-      // Let auto-fit stage weights between CPU and the accelerator. A fixed
-      // params backend disables auto-fit in sd.cpp. Keep DSP mappings below the
-      // v73 address-space limit and leave room for graph buffers.
+      // Stream NPU weights from disk per graph segment. Keeping a second
+      // complete copy on Vulkan retains the text encoder during diffusion and
+      // can trigger Android's low-memory killer. The graph cap still controls
+      // staging even though explicit disk placement disables auto-fit.
+      if (!preferred.empty()) {
+        config.params_backend = "disk";
+        config.auto_fit = false;
+      }
       config.max_vram = "HTP0=1.5";
       config.disable_prefetch = true;
 #endif
@@ -97,6 +102,8 @@ public:
       }
       if (!loaded && !preferred.empty() && !cancelled.load()) {
         preferred.clear();
+        config.params_backend = nullptr;
+        config.auto_fit = true;
         config.backend = "Vulkan0,te=cpu";
         try { loaded = new_sd_ctx(&config); }
         catch (const std::exception &) {
