@@ -10,9 +10,15 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  useReducedMotion,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
-import Video from 'react-native-video';
+import VideoPlayer, { type VideoPlayerRef } from 'react-native-video-player';
+import { ResizeMode } from 'react-native-video';
+import { useTheme } from '../../../theme';
+import { COLORS_DARK } from '../../../theme/palettes';
+import { SPACING, TYPOGRAPHY } from '../../../constants';
+import { Button } from '../../Button';
 // Imported directly, not through the barrel: a component that reaches its sibling via the index
 // resolves undefined at render time.
 import { LoadingDots } from '../../LoadingDots';
@@ -99,6 +105,75 @@ interface MessageAttachmentsProps {
   styles: any;
   colors: any;
   onImagePress?: (uri: string) => void;
+}
+
+/** The library owns playback and controls; this adapter supplies attachment data and theme. */
+function VideoAttachment({ attachment }: { attachment: MediaAttachment }) {
+  const { colors } = useTheme();
+  const player = React.useRef<VideoPlayerRef>(null);
+  const reducedMotion = useReducedMotion();
+  const [size, setSize] = React.useState({
+    width: attachment.width || 16,
+    height: attachment.height || 9,
+  });
+  const [loaded, setLoaded] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  return (
+    <View style={{ width: '100%', gap: SPACING.xs }}>
+      <VideoPlayer
+        ref={player}
+        source={{ uri: resolveMediaUri(attachment.uri) }}
+        videoWidth={size.width}
+        videoHeight={size.height}
+        resizeMode={ResizeMode.CONTAIN}
+        showDuration
+        disableControlsAutoHide
+        pauseOnPress
+        animationDuration={reducedMotion ? 0 : 150}
+        playInBackground
+        playWhenInactive
+        ignoreSilentSwitch="ignore"
+        enterPictureInPictureOnLeave
+        onRestoreUserInterfaceForPictureInPictureStop={() => {
+          player.current?.restoreUserInterfaceForPictureInPictureStopCompleted(true);
+        }}
+        onLoad={({ naturalSize }) => {
+          setLoaded(true);
+          setError(null);
+          if (naturalSize.width > 0 && naturalSize.height > 0) {
+            setSize({ width: naturalSize.width, height: naturalSize.height });
+          }
+        }}
+        onError={() => setError('This video could not be played.')}
+        customStyles={{
+          wrapper: { width: '100%', borderRadius: SPACING.sm, overflow: 'hidden' },
+          controls: { backgroundColor: COLORS_DARK.surface, height: SPACING.xl * 2, marginTop: 0 },
+          controlButton: { minWidth: SPACING.xl * 2, minHeight: SPACING.xl * 2 },
+          controlIcon: { tintColor: COLORS_DARK.text },
+          playArrow: { tintColor: colors.text },
+          playButton: { backgroundColor: colors.surface, width: SPACING.xl * 2, height: SPACING.xl * 2, borderRadius: SPACING.sm },
+          seekBarProgress: { backgroundColor: COLORS_DARK.primary },
+          seekBarKnob: { backgroundColor: COLORS_DARK.primary },
+          seekBarBackground: { backgroundColor: COLORS_DARK.border },
+          durationText: { ...TYPOGRAPHY.meta, color: COLORS_DARK.textSecondary },
+        }}
+      />
+      {error && <Text accessibilityRole="alert" style={{ ...TYPOGRAPHY.bodySmall, color: colors.error }}>{error}</Text>}
+      <Button
+        title="Picture in picture"
+        variant="ghost"
+        size="small"
+        disabled={!loaded}
+        onPress={async () => {
+          try {
+            await player.current?.enterPictureInPicture();
+          } catch {
+            setError('Picture in picture is not available on this device.');
+          }
+        }}
+      />
+    </View>
+  );
 }
 
 function AudioAttachment({
@@ -201,7 +276,7 @@ export function MessageAttachments({
             colors={colors}
           />
         ) : attachment.type === 'video' ? (
-          <Video key={attachment.id} source={{ uri: resolveMediaUri(attachment.uri) }} controls paused resizeMode="contain" style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' }} />
+          <VideoAttachment key={attachment.id} attachment={attachment} />
         ) : attachment.type === 'audio' ? (
           <AudioAttachment
             key={attachment.id}
