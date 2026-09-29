@@ -25,8 +25,18 @@ string(TOLOWER "${CMAKE_HOST_SYSTEM_NAME}" VIDEO_HOST_OS)
 # shaderc installation, or an explicit -DVulkan_GLSLC_EXECUTABLE path.
 find_program(Vulkan_GLSLC_EXECUTABLE NAMES glslc glslc.exe
   HINTS "${SD_SOURCE}/../shaderc/bin" NO_CMAKE_FIND_ROOT_PATH REQUIRED)
-find_program(VIDEO_HOST_CC NAMES clang gcc cl NO_CMAKE_FIND_ROOT_PATH REQUIRED)
-find_program(VIDEO_HOST_CXX NAMES clang++ g++ cl NO_CMAKE_FIND_ROOT_PATH REQUIRED)
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+  # The NDK prepends its compiler directory even for host-program discovery.
+  # Its clang cannot compile against the current macOS SDK. Use Xcode's host
+  # toolchain for the shader generator; model libraries still use the NDK.
+  execute_process(COMMAND xcrun --sdk macosx --find clang
+    OUTPUT_VARIABLE VIDEO_HOST_CC OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(COMMAND xcrun --sdk macosx --find clang++
+    OUTPUT_VARIABLE VIDEO_HOST_CXX OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+else()
+  find_program(VIDEO_HOST_CC NAMES clang gcc cl NO_CMAKE_FIND_ROOT_PATH REQUIRED)
+  find_program(VIDEO_HOST_CXX NAMES clang++ g++ cl NO_CMAKE_FIND_ROOT_PATH REQUIRED)
+endif()
 set(GGML_VULKAN_SHADERS_GEN_TOOLCHAIN "${CMAKE_BINARY_DIR}/video-host-toolchain.cmake")
 file(WRITE "${GGML_VULKAN_SHADERS_GEN_TOOLCHAIN}"
   "set(CMAKE_C_COMPILER \"${VIDEO_HOST_CC}\")\nset(CMAKE_CXX_COMPILER \"${VIDEO_HOST_CXX}\")\nset(CMAKE_MAKE_PROGRAM \"${CMAKE_MAKE_PROGRAM}\" CACHE FILEPATH \"Host build tool\" FORCE)\n")
