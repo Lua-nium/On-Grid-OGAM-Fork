@@ -268,6 +268,9 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           renderItem={renderItem}
           keyExtractor={item => item.id}
           extraData={interfaceMode}
+          ListFooterComponent={
+            <VideoGenerationStatus conversationId={chat.activeConversationId} />
+          }
           contentContainerStyle={styles.messageList}
           onScroll={handleScroll}
           onContentSizeChange={(_w, h) => {
@@ -323,7 +326,6 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           </AnimatedPressable>
         </Animated.View>
       )}
-      <VideoGenerationStatus conversationId={chat.activeConversationId} />
       {chat.isGeneratingImage && (
         <ImageProgressIndicator
           styles={styles}
@@ -411,7 +413,9 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           onSend={chat.handleSend}
           onStop={chat.handleStop}
           disabled={!chat.hasActiveModel}
-          isGenerating={chat.isStreaming || chat.isThinking}
+          isGenerating={
+            chat.isGeneratingForThisConversation || chat.isStreaming || chat.isThinking
+          }
           supportsVision={chat.supportsVision}
           visionNeedsRepair={chat.visionNeedsRepair}
           conversationId={chat.activeConversationId}

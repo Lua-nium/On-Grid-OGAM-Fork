@@ -1,9 +1,10 @@
 import React, { useSyncExternalStore } from 'react';
 import { Text } from 'react-native';
 import { videoGenerationService } from '../services/videoGenerationService';
-import { Card } from './Card';
-import { Button } from './Button';
 import { useTheme } from '../theme';
+import { SPACING, TYPOGRAPHY } from '../constants';
+
+/** Inline status below the pending reply. The composer owns Stop. */
 export function VideoGenerationStatus({
   conversationId,
 }: {
@@ -14,30 +15,36 @@ export function VideoGenerationStatus({
     videoGenerationService.getState,
   );
   const { colors } = useTheme();
-  if (conversationId && state.conversationId !== conversationId) return null;
-  if (state.phase !== 'running') return null;
+  if (state.phase !== 'running' || state.conversationId !== conversationId)
+    return null;
+  const samplingFinished =
+    state.progress && state.progress.step >= state.progress.total;
+  const label =
+    state.stage === 'enhancing'
+      ? 'Preparing prompt'
+      : state.stage === 'preparing'
+      ? 'Loading video model'
+      : state.stage === 'encoding'
+      ? 'Saving video'
+      : samplingFinished
+      ? 'Finishing video'
+      : 'Generating video';
+  const steps =
+    state.stage === 'generating' && state.progress && !samplingFinished
+      ? ` · Step ${state.progress.step} of ${state.progress.total}`
+      : '';
   return (
-    <Card
-      title={
-        state.stage === 'encoding'
-          ? 'Encoding video'
-          : state.stage === 'preparing'
-            ? 'Loading video model'
-            : 'Generating video'
-      }
+    <Text
+      accessibilityLiveRegion="polite"
+      style={{
+        ...TYPOGRAPHY.bodySmall,
+        color: colors.textSecondary,
+        marginHorizontal: SPACING.lg,
+        marginBottom: SPACING.sm,
+      }}
     >
-      {state.progress && (
-        <Text style={{ color: colors.text }}>
-          {state.progress.step} / {state.progress.total}
-        </Text>
-      )}
-      <Button
-        title="Stop"
-        variant="secondary"
-        onPress={() => {
-          void videoGenerationService.cancelGeneration();
-        }}
-      />
-    </Card>
+      {label}
+      {steps}
+    </Text>
   );
 }

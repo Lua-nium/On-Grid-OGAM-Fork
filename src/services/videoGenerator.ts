@@ -17,9 +17,21 @@ export const videoGenerator = {
   ): Promise<string> {
     if (!native)
       throw new Error('This build does not include the video engine.');
+    let lastStep = 0;
     const listener = new NativeEventEmitter(native).addListener(
       'VideoGenerationProgress',
       event => {
+        // sd.cpp also sends tensor-loading and VAE tile counters through this
+        // callback. Only sampling steps belong in the generation step count.
+        if (event.stage === 'generating') {
+          if (
+            event.total !== request.steps ||
+            event.step <= lastStep ||
+            event.step > request.steps
+          )
+            return;
+          lastStep = event.step;
+        }
         onUpdate({
           stage: event.stage,
           progress:
