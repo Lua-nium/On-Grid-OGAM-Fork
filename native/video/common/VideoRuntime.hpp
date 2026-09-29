@@ -219,6 +219,13 @@ public:
       params.sample_params.scheduler = sd_get_default_scheduler(loaded, EULER_SAMPLE_METHOD);
       params.vae_tiling_params.enabled = true;
 #ifdef __ANDROID__
+      // Mobile Vulkan drivers can lose the device on a full temporal decode.
+      // Keep each decode graph small instead of waiting for allocation failure:
+      // a lost GPU cannot recover through the allocator's tiling retry.
+      params.vae_tiling_params.temporal_tiling = true;
+      params.vae_tiling_params.tile_size_w = 128;
+      params.vae_tiling_params.tile_size_h = 128;
+      params.vae_tiling_params.extra_tiling_args = "temporal_tile_frames=1";
       conditioning(preferred.empty() ? "cpu" : "npu");
 #else
       conditioning("");
