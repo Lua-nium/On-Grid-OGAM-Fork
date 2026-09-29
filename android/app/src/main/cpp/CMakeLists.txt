@@ -29,6 +29,13 @@ set(GGML_VULKAN_SHADERS_GEN_TOOLCHAIN "${CMAKE_BINARY_DIR}/video-host-toolchain.
 file(WRITE "${GGML_VULKAN_SHADERS_GEN_TOOLCHAIN}"
   "set(CMAKE_C_COMPILER \"${VIDEO_HOST_CC}\")\nset(CMAKE_CXX_COMPILER \"${VIDEO_HOST_CXX}\")\nset(CMAKE_MAKE_PROGRAM \"${CMAKE_MAKE_PROGRAM}\" CACHE FILEPATH \"Host build tool\" FORCE)\n")
 add_subdirectory("${SD_SOURCE}" runtime)
+# Keep model execution representative in debug apps. Unoptimized tensor kernels
+# make CPU conditioning take minutes even though the app remains responsive.
+foreach(VIDEO_RUNTIME_TARGET stable-diffusion ggml-base ggml-cpu ggml-vulkan)
+  if(TARGET ${VIDEO_RUNTIME_TARGET})
+    target_compile_options(${VIDEO_RUNTIME_TARGET} PRIVATE $<$<CONFIG:Debug>:-O3>)
+  endif()
+endforeach()
 add_library(offgrid_video SHARED video/video-jni.cpp)
 target_include_directories(offgrid_video PRIVATE "${SD_SOURCE}/include" "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../native/video/common")
 target_link_libraries(offgrid_video PRIVATE stable-diffusion android log)
