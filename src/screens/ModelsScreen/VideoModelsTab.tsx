@@ -7,13 +7,16 @@ import {
   resolveHuggingFaceModel,
   formatFileSize,
   determineCredibility,
+  videoVaeFilename,
 } from '@offgrid/models';
 import type { HFSearchResult, ModelFileVariant } from '@offgrid/models';
-import { Button, ModelCard } from '../../components';
+import { ModelCard } from '../../components';
+import { ScreenHeader } from '../../components/ScreenHeader';
 import { LoadingDots } from '../../components/LoadingDots';
 import { useAppStore } from '../../stores';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useDownloadStore } from '../../stores/downloadStore';
+import { hardwareService } from '../../services/hardware';
 import { modelDownloadService } from '../../services/modelDownloadService';
 import { useTheme, useThemedStyles } from '../../theme';
 import { createStyles } from './styles';
@@ -32,6 +35,8 @@ export const VideoModelsTab: React.FC = () => {
   const models = useAppStore(s => s.downloadedVideoModels);
   const active = useAppStore(s => s.activeVideoModelId);
   const downloads = useDownloadStore(s => s.downloads);
+  const pendingModels = useAppStore(s => s.videoDownloads);
+  const ramGB = hardwareService.getTotalMemoryGB();
   useEffect(() => {
     let current = true;
     if (!query.trim()) {
@@ -94,160 +99,257 @@ export const VideoModelsTab: React.FC = () => {
   const defaults = CATALOG.filter(m => m.kind === 'video');
   const rows = query.trim()
     ? results
-    : defaults.map(m => ({ id: m.id, name: m.name, org: m.org ?? '' }));
-  return (
-    <ScrollView keyboardShouldPersistTaps="handled">
-      {selected ? (
-        <>
-          <Button
-            title="Back to video models"
-            variant="ghost"
-            onPress={() => setSelected(null)}
-          />
-          <Text style={{ color: colors.text }}>{selected.name}</Text>
-          <Text style={{ color: colors.textSecondary }}>
-            Each download includes the required text encoder and VAE.
-          </Text>
-          {!loading && files.length === 0 && (
-            <Text style={{ color: colors.textMuted }}>
-              No files in this repository are supported by this build. Local
-              generation currently requires Wan 2.1 T2V 1.3B.
+    : defaults.map(m => ({
+        id: m.id,
+        name: m.name,
+        org: m.org ?? '',
+        credibility: determineCredibility(m.org ?? ''),
+      }));
+
+  // Both browsing and version selection use Text's existing card and download states.
+  const renderCard = (row: HFSearchResult, file?: ModelFileVariant) => {
+    const catalogEntry = defaults.find(model => model.id === row.id);
+    const template = file
+      ? defaults.find(model =>
+          model.files.some(f => f.name === videoVaeFilename(file.fileName)),
+        )
+      : catalogEntry;
+    const modelKey = `video:${row.id}`;
+    const installed = models.find(model => model.id === row.id);
+    const matchesFile = (model: typeof installed) =>
+      !!model &&
+      (!file ||
+        model.files.some(
+          f => f.role === 'primary' && f.name === file.fileName,
+        ));
+    const isDownloaded = matchesFile(installed);
+    const pending = pendingModels[row.id];
+    const transfer =
+      !file ||
+      pending?.files.some(f => f.role === 'primary' && f.name === file.fileName)
+        ? downloads[modelKey]
+        : undefined;
+    const unavailable = catalogEntry?.availability === 'coming_soon';
+    const totalBytes = file
+      ? file.sizeBytes +
+        (template?.files
+          .filter(f => f.role !== 'primary')
+          .reduce((sum, f) => sum + (f.sizeBytes ?? 0), 0) ?? 0)
+      : (installed ?? pending ?? catalogEntry)?.files.reduce(
+          (sum, f) => sum + (f.sizeBytes ?? 0),
+          0,
+        );
+    const defaultVersion =
+      file &&
+      template?.files.some(
+        f => f.role === 'primary' && f.name === file.fileName,
+      );
+    const precision =
+      file?.quant && file.quant !== 'Unknown' ? file.quant : undefined;
+    const versionName = defaultVersion
+      ? 'Standard'
+      : /bf16/i.test(file?.fileName ?? '')
+      ? 'Alternative precision'
+      : precision
+      ? `Compact ${precision}`
+      : 'Alternative version';
+    const memory = template?.minRamGb;
+    const memoryWarning =
+      memory && ramGB > 0 && ramGB < memory
+        ? 'May exceed available memory. Use an OGAD server for larger models.'
+        : undefined;
+    const facts = [
+      unavailable ? 'Not available in this app yet' : undefined,
+      totalBytes ? `${formatFileSize(totalBytes)} total download` : undefined,
+      memory ? `${memory} GB memory suggested` : undefined,
+      defaultVersion ? 'Default version' : undefined,
+      file && installed && !isDownloaded
+        ? 'Remove the installed version to change versions.'
+        : undefined,
+    ].filter((fact): fact is string => !!fact);
+    const open = () => {
+      setError(null);
+      setSelected(row);
+    };
+    const startDownload = () => {
+      if (file) download(file.fileName);
+      else if (catalogEntry?.files.length)
+        act(() =>
+          modelDownloadService.start({
+            modelType: 'video',
+            model: catalogEntry,
+          }),
+        );
+      else open();
+    };
+    return (
+      <ModelCard
+        key={file?.fileName ?? row.id}
+        compact
+        model={{
+          id: row.id,
+          name: file ? versionName : row.name,
+          author: row.org,
+          credibility: {
+            source:
+              row.credibility === 'offgrid' ? 'community' : row.credibility,
+            isOfficial: row.credibility === 'official',
+            isVerifiedQuantizer: row.credibility === 'verified-quantizer',
+          },
+          description: unavailable
+            ? catalogEntry?.availabilityNote
+            : 'Create short, silent videos from a description.',
+        }}
+        facts={facts}
+        footer={
+          transfer?.status === 'processing' ? (
+            <Text style={styles.modelDescription}>
+              Checking downloaded files...
             </Text>
-          )}
-          {files.map(file => (
-            <Button
-              key={file.fileName}
-              title={`${file.fileName} · ${formatFileSize(file.sizeBytes)}`}
-              variant="outline"
-              disabled={
-                !!downloads[`video:${selected.id}`] ||
-                models.some(model => model.id === selected.id)
+          ) : memoryWarning ? (
+            <Text style={styles.modelDescription}>{memoryWarning}</Text>
+          ) : undefined
+        }
+        isDownloaded={isDownloaded}
+        isActive={isDownloaded && active === row.id}
+        isDownloading={
+          transfer?.status === 'running' || transfer?.status === 'processing'
+        }
+        isPaused={transfer?.status === 'paused'}
+        isQueued={transfer?.status === 'pending'}
+        downloadProgress={transfer?.progress}
+        downloadBytes={
+          transfer
+            ? {
+                downloaded: transfer.bytesDownloaded,
+                total: transfer.combinedTotalBytes || transfer.totalBytes,
+                bytesPerSecond: transfer.bytesPerSecond,
               }
-              onPress={() => download(file.fileName)}
-            />
-          ))}
-        </>
+            : undefined
+        }
+        onPress={!file && !unavailable ? open : undefined}
+        onDownload={
+          !unavailable && !installed && !downloads[modelKey]
+            ? startDownload
+            : undefined
+        }
+        onSelect={
+          isDownloaded
+            ? () => {
+                useAppStore.getState().setActiveVideoModelId(row.id);
+                useRemoteServerStore
+                  .getState()
+                  .setActiveRemoteMediaServerId('video', null);
+              }
+            : undefined
+        }
+        onDelete={
+          isDownloaded
+            ? () => act(() => modelDownloadService.remove(modelKey))
+            : undefined
+        }
+        onPause={
+          transfer?.status === 'running'
+            ? () => act(() => modelDownloadService.pause(modelKey))
+            : undefined
+        }
+        onResume={
+          transfer?.status === 'paused'
+            ? () => act(() => modelDownloadService.resume(modelKey))
+            : undefined
+        }
+        onCancel={
+          transfer
+            ? () => act(() => modelDownloadService.cancel(modelKey))
+            : undefined
+        }
+        failedState={
+          transfer?.status === 'failed'
+            ? {
+                errorMessage: transfer.errorMessage ?? 'Download failed.',
+                bytesDownloaded: transfer.bytesDownloaded,
+                totalBytes: transfer.combinedTotalBytes || transfer.totalBytes,
+                onRetry: () => act(() => modelDownloadService.retry(modelKey)),
+                onRemove: () =>
+                  act(() => modelDownloadService.remove(modelKey)),
+              }
+            : undefined
+        }
+      />
+    );
+  };
+
+  return (
+    <View style={styles.flex1}>
+      {selected ? (
+        <ScreenHeader title={selected.name} onBack={() => setSelected(null)} />
       ) : (
-        <>
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              value={query}
-              onChangeText={setQuery}
-              accessibilityLabel="Search video models on Hugging Face"
-              placeholder="Search Hugging Face"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-            />
-          </View>
-          {rows.map(row => {
-            const catalogEntry = defaults.find(model => model.id === row.id);
-            const installed = models.some(m => m.id === row.id),
-              transfer = downloads[`video:${row.id}`];
-            return (
-              <ModelCard
-                key={row.id}
-                model={{ id: row.id, name: row.name, author: row.org }}
-                facts={
-                  catalogEntry?.availabilityNote
-                    ? [catalogEntry.availabilityNote]
-                    : undefined
-                }
-                isDownloaded={installed}
-                isActive={active === row.id}
-                isDownloading={transfer?.status === 'running'}
-                isPaused={transfer?.status === 'paused'}
-                isQueued={transfer?.status === 'pending'}
-                downloadProgress={transfer?.progress}
-                onPress={() =>
-                  setSelected({
-                    ...row,
-                    credibility: determineCredibility(row.org),
-                  })
-                }
-                onDownload={
-                  catalogEntry?.availability === 'coming_soon'
-                    ? undefined
-                    : () =>
-                        setSelected({
-                          ...row,
-                          credibility: determineCredibility(row.org),
-                        })
-                }
-                onSelect={
-                  installed
-                    ? () => {
-                        useAppStore.getState().setActiveVideoModelId(row.id);
-                        useRemoteServerStore
-                          .getState()
-                          .setActiveRemoteMediaServerId('video', null);
-                      }
-                    : undefined
-                }
-                onDelete={
-                  installed
-                    ? () =>
-                        act(() =>
-                          modelDownloadService.remove(`video:${row.id}`),
-                        )
-                    : undefined
-                }
-                onPause={
-                  transfer?.status === 'running'
-                    ? () =>
-                        act(() => modelDownloadService.pause(`video:${row.id}`))
-                    : undefined
-                }
-                onResume={
-                  transfer?.status === 'paused'
-                    ? () =>
-                        act(() =>
-                          modelDownloadService.resume(`video:${row.id}`),
-                        )
-                    : undefined
-                }
-                onCancel={
-                  transfer
-                    ? () =>
-                        act(() =>
-                          modelDownloadService.cancel(`video:${row.id}`),
-                        )
-                    : undefined
-                }
-                failedState={
-                  transfer?.status === 'failed'
-                    ? {
-                        errorMessage:
-                          transfer.errorMessage ?? 'Download failed.',
-                        bytesDownloaded: transfer.bytesDownloaded,
-                        totalBytes: transfer.totalBytes,
-                        onRetry: () =>
-                          act(() =>
-                            modelDownloadService.retry(`video:${row.id}`),
-                          ),
-                        onRemove: () =>
-                          act(() =>
-                            modelDownloadService.remove(`video:${row.id}`),
-                          ),
-                      }
-                    : undefined
-                }
-              />
-            );
-          })}
-          {!loading && query.trim() && rows.length === 0 && (
-            <Text style={{ color: colors.textMuted }}>
-              No compatible video repositories found.
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            value={query}
+            onChangeText={setQuery}
+            accessibilityLabel="Search video models on Hugging Face"
+            placeholder="Search Hugging Face"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+        </View>
+      )}
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {selected ? (
+          <>
+            <Text style={styles.sectionTitle}>Choose a version</Text>
+            <Text style={styles.sectionSubtitle}>
+              The total includes everything needed to create videos. Download
+              one version.
             </Text>
-          )}
-        </>
-      )}
-      {loading && <LoadingDots />}
-      {error && (
-        <Text accessibilityRole="alert" style={{ color: colors.error }}>
-          {error}
-        </Text>
-      )}
-    </ScrollView>
+            {[...files]
+              .sort((a, b) => {
+                const primary = defaults
+                  .find(m => m.id === selected.id)
+                  ?.files.find(f => f.role === 'primary')?.name;
+                return (
+                  Number(b.fileName === primary) -
+                    Number(a.fileName === primary) || a.sizeBytes - b.sizeBytes
+                );
+              })
+              .map(file => renderCard(selected, file))}
+            {!loading && files.length === 0 && (
+              <Text style={styles.emptyText}>
+                No supported versions found. Choose another video model.
+              </Text>
+            )}
+          </>
+        ) : (
+          <>
+            {rows.map(row => renderCard(row))}
+            {!loading && query.trim() && rows.length === 0 && (
+              <Text style={styles.emptyText}>
+                No video models found. Try a different search.
+              </Text>
+            )}
+          </>
+        )}
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <LoadingDots />
+          </View>
+        )}
+        {error && (
+          <Text
+            accessibilityRole="alert"
+            style={[styles.loadingText, { color: colors.error }]}
+          >
+            {error}
+          </Text>
+        )}
+      </ScrollView>
+    </View>
   );
 };
