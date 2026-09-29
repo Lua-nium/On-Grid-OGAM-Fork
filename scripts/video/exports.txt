@@ -3,3 +3,4 @@ _new_sd_ctx
 _free_sd_ctx
 _free_sd_images
 _generate_video
+_generate_image

@@ -90,5 +90,65 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
             }
         }
     }
+    private external fun nativeLoadImage(path: String, weight: String, vae: String, llm: String, threads: Int, cpuOnly: Boolean)
+    private external fun nativeUnloadImage()
+    private external fun nativeImagePath(): String
+    private external fun nativeGenerateImage(prompt: String, negative: String, width: Int, height: Int, steps: Int, guidance: Double, seed: Double): ByteArray
+    fun imageProgress(step: Int, total: Int) {
+        if (!context.hasActiveReactInstance()) return
+        context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("SDImageProgress", Arguments.createMap().apply {
+            putInt("step", step); putInt("totalSteps", total); putDouble("progress", if (total > 0) step.toDouble() / total else 0.0)
+        })
+    }
+    @ReactMethod fun getLoadedImagePath(promise: Promise) { promise.resolve(nativeImagePath().ifEmpty { null }) }
+    @ReactMethod fun loadImageModel(input: ReadableMap, promise: Promise) {
+        if (!busy.compareAndSet(false, true)) { promise.reject("IMAGE_BUSY", "Image or video generation is running."); return }
+        cancelled.set(false); nativePrepare()
+        executor.execute {
+            try {
+                prepareHexagonRuntime()
+                nativeLoadImage(checkNotNull(input.getString("modelPath")), checkNotNull(input.getString("weight")), checkNotNull(input.getString("vae")), checkNotNull(input.getString("llm")), input.getInt("threads"), input.getBoolean("cpuOnly"))
+                promise.resolve(true)
+            } catch (error: Throwable) { promise.reject("IMAGE_LOAD_FAILED", error.message, error) }
+            finally { busy.set(false) }
+        }
+    }
+    @ReactMethod fun unloadImageModel(promise: Promise) {
+        if (!busy.compareAndSet(false, true)) { promise.reject("IMAGE_BUSY", "Image or video generation is running."); return }
+        executor.execute {
+            try { nativeUnloadImage(); promise.resolve(true) }
+            catch (error: Throwable) { promise.reject("IMAGE_UNLOAD_FAILED", error.message, error) }
+            finally { busy.set(false) }
+        }
+    }
+    @ReactMethod fun generateImage(input: ReadableMap, promise: Promise) {
+        if (!busy.compareAndSet(false, true)) { promise.reject("IMAGE_BUSY", "Image or video generation is running."); return }
+        cancelled.set(false); nativePrepare()
+        executor.execute {
+            var output: File? = null
+            try {
+                val width = input.getInt("width"); val height = input.getInt("height")
+                require(width in 64..2048 && height in 64..2048 && width % 16 == 0 && height % 16 == 0)
+                output = File(checkNotNull(input.getString("outputPath")))
+                VideoGenerationService.admission = CompletableFuture()
+                VideoGenerationService.cancel = { stop() }
+                ContextCompat.startForegroundService(context, Intent(context, VideoGenerationService::class.java).putExtra("modality", "image"))
+                VideoGenerationService.admission.get(5, TimeUnit.SECONDS)
+                val bytes = nativeGenerateImage(checkNotNull(input.getString("prompt")), input.getString("negativePrompt") ?: "", width, height, input.getInt("steps"), input.getDouble("guidanceScale"), input.getDouble("seed"))
+                check(!cancelled.get()) { "Image generation stopped." }
+                val pixels = IntArray(width * height) { i ->
+                    android.graphics.Color.rgb(bytes[i * 3].toInt() and 255, bytes[i * 3 + 1].toInt() and 255, bytes[i * 3 + 2].toInt() and 255)
+                }
+                val bitmap = android.graphics.Bitmap.createBitmap(pixels, width, height, android.graphics.Bitmap.Config.ARGB_8888)
+                try { output.outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) } }
+                finally { bitmap.recycle() }
+                check(!cancelled.get()) { "Image generation stopped." }
+                promise.resolve(Arguments.createMap().apply {
+                    putString("imagePath", output.path); putInt("width", width); putInt("height", height); putDouble("seed", input.getDouble("seed")); putString("id", input.getString("id"))
+                })
+            } catch (error: Throwable) { output?.delete(); promise.reject("IMAGE_FAILED", error.message, error) }
+            finally { VideoGenerationService.cancel = null; context.stopService(Intent(context, VideoGenerationService::class.java)); busy.set(false) }
+        }
+    }
     override fun invalidate() { stop(); executor.shutdown(); super.invalidate() }
 }

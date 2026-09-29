@@ -20,36 +20,17 @@ struct VideoRequest {
   int64_t seed;
   std::string llm, embeddings, audioVae;
   float flowShift = 0;
+  bool cpuOnly = false;
+  int threads = 4;
 };
 // One instance per process. Both host bridges use the same native lifecycle.
 class VideoRuntime {
   std::mutex contextMutex;
   std::mutex executionMutex;
   sd_ctx_t *context = nullptr;
-public:
-  std::atomic_bool cancelled{false};
-  void cancel() {
-    cancelled.store(true);
-    std::lock_guard<std::mutex> guard(contextMutex);
-    if (context) sd_cancel_generation(context, SD_CANCEL_ALL);
-  }
-  void run(const VideoRequest &request,
-           const std::function<void(int, int)> &progress,
-           const std::function<void(sd_image_t *, int, int)> &encode,
-           const std::function<void(const char *)> &conditioning) {
-    std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
-    if (!execution.owns_lock()) throw std::runtime_error("Video generation is already running.");
-    sd_image_t *frames = nullptr;
-    int count = 0, fps = request.fps;
-    auto cleanup = [&] {
-      if (frames) free_sd_images(frames, count);
-      sd_set_progress_callback(nullptr, nullptr);
-      std::lock_guard<std::mutex> guard(contextMutex);
-      if (context) free_sd_ctx(context);
-      context = nullptr;
-    };
-    try {
-      if (cancelled.load()) throw std::runtime_error("Video generation stopped.");
+  sd_ctx_t *imageContext = nullptr;
+  std::string imagePath;
+  sd_ctx_t *loadContext(const VideoRequest &request, std::string &preferred) {
       sd_ctx_params_t config;
       sd_ctx_params_init(&config);
       config.diffusion_model_path = request.weight.c_str();
@@ -66,11 +47,11 @@ public:
       // Probe the NPU before choosing it. Devices without a usable Hexagon
       // runtime retain Vulkan diffusion and the CPU conditioning fallback.
       sd_list_devices(nullptr, 0);
-      std::string preferred;
+
       for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
         auto device = ggml_backend_dev_get(i);
         const char *name = ggml_backend_dev_name(device);
-        if (std::string(name).rfind("HTP", 0) != 0) continue;
+        if (request.cpuOnly || std::string(name).rfind("HTP", 0) != 0) continue;
         try {
           auto probe = ggml_backend_dev_init(device, nullptr);
           if (!probe) continue;
@@ -81,7 +62,10 @@ public:
           // An installed driver can still reject the DSP session.
         }
       }
-      config.backend = preferred.empty() ? "Vulkan0,te=cpu" : preferred.c_str();
+      // Convolution-heavy decoders cannot execute their main operations on
+      // Hexagon. Keep them on the GPU to avoid repeated GPU/NPU copies.
+      const std::string npuBackend = preferred + (ggml_backend_dev_by_name("Vulkan0") ? ",vae=Vulkan0" : ",vae=cpu");
+      config.backend = preferred.empty() ? "Vulkan0,te=cpu" : npuBackend.c_str();
       // Stream NPU weights from disk per graph segment. Keeping a second
       // complete copy on Vulkan retains the text encoder during diffusion and
       // can trigger Android's low-memory killer. The graph cap still controls
@@ -93,12 +77,18 @@ public:
       config.max_vram = "HTP0=1.5";
       config.disable_prefetch = true;
 #endif
-      config.n_threads = 4;
+      config.n_threads = request.threads;
+      if (request.cpuOnly) {
+        config.backend = "cpu"; config.params_backend = nullptr; config.auto_fit = true;
+#ifdef __ANDROID__
+        preferred.clear();
+#endif
+      }
       sd_ctx_t *loaded = nullptr;
 #ifdef __ANDROID__
       try { loaded = new_sd_ctx(&config); }
       catch (const std::exception &) {
-        if (preferred.empty() || cancelled.load()) throw;
+        if (request.cpuOnly || cancelled.load()) throw;
       }
       if (!loaded && !preferred.empty() && !cancelled.load()) {
         preferred.clear();
@@ -117,6 +107,97 @@ public:
 #else
       loaded = new_sd_ctx(&config);
 #endif
+      return loaded;
+  }
+public:
+  ~VideoRuntime() {
+    if (context) free_sd_ctx(context);
+    if (imageContext) free_sd_ctx(imageContext);
+  }
+  std::atomic_bool cancelled{false};
+  void cancel() {
+    cancelled.store(true);
+    std::lock_guard<std::mutex> guard(contextMutex);
+    if (context) sd_cancel_generation(context, SD_CANCEL_ALL);
+    if (imageContext) sd_cancel_generation(imageContext, SD_CANCEL_ALL);
+  }
+  void loadImage(const VideoRequest &request, const std::string &path) {
+    std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
+    if (!execution.owns_lock()) throw std::runtime_error("Image or video generation is running.");
+    {
+      std::lock_guard<std::mutex> guard(contextMutex);
+      if (imageContext) free_sd_ctx(imageContext);
+      imageContext = nullptr; imagePath.clear();
+    }
+    std::string preferred;
+    auto loaded = loadContext(request, preferred);
+    if (!loaded) throw std::runtime_error("Could not load the image model pack.");
+    std::lock_guard<std::mutex> guard(contextMutex);
+    if (cancelled.load()) { free_sd_ctx(loaded); throw std::runtime_error("Image loading stopped."); }
+    imageContext = loaded; imagePath = path;
+  }
+  void unloadImage() {
+    std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
+    if (!execution.owns_lock()) throw std::runtime_error("Image or video generation is running.");
+    std::lock_guard<std::mutex> guard(contextMutex);
+    if (imageContext) free_sd_ctx(imageContext);
+    imageContext = nullptr; imagePath.clear();
+  }
+  std::string loadedImagePath() {
+    std::lock_guard<std::mutex> guard(contextMutex);
+    return imageContext ? imagePath : "";
+  }
+  void image(const VideoRequest &request,
+             const std::function<void(int, int)> &progress,
+             const std::function<void(const sd_image_t &)> &save) {
+    std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
+    if (!execution.owns_lock()) throw std::runtime_error("Image or video generation is running.");
+    if (!imageContext) throw std::runtime_error("Image model is unloaded.");
+    sd_image_t *images = nullptr; int count = 0;
+    auto cleanup = [&] {
+      sd_set_progress_callback(nullptr, nullptr);
+      if (images) free_sd_images(images, count);
+    };
+    try {
+      if (cancelled.load()) throw std::runtime_error("Image generation stopped.");
+      sd_set_progress_callback([](int step, int total, float, void *data) {
+        (*static_cast<const std::function<void(int, int)> *>(data))(step, total);
+      }, const_cast<void *>(static_cast<const void *>(&progress)));
+      sd_img_gen_params_t params; sd_img_gen_params_init(&params);
+      params.prompt = request.prompt.c_str(); params.negative_prompt = request.negative.c_str();
+      params.width = request.width; params.height = request.height; params.seed = request.seed;
+      params.batch_count = 1;
+      params.sample_params.sample_steps = request.steps;
+      params.sample_params.guidance.txt_cfg = request.guidance;
+      params.sample_params.sample_method = EULER_SAMPLE_METHOD;
+      params.sample_params.scheduler = sd_get_default_scheduler(imageContext, EULER_SAMPLE_METHOD);
+      params.vae_tiling_params.enabled = true;
+      if (!generate_image(imageContext, &params, &images, &count) || !images || count != 1)
+        throw std::runtime_error("The image engine produced no image.");
+      if (cancelled.load()) throw std::runtime_error("Image generation stopped.");
+      save(images[0]);
+    } catch (...) { cleanup(); throw; }
+    cleanup();
+  }
+  void run(const VideoRequest &request,
+           const std::function<void(int, int)> &progress,
+           const std::function<void(sd_image_t *, int, int)> &encode,
+           const std::function<void(const char *)> &conditioning) {
+    std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
+    if (!execution.owns_lock()) throw std::runtime_error("Video generation is already running.");
+    sd_image_t *frames = nullptr;
+    int count = 0, fps = request.fps;
+    auto cleanup = [&] {
+      if (frames) free_sd_images(frames, count);
+      sd_set_progress_callback(nullptr, nullptr);
+      std::lock_guard<std::mutex> guard(contextMutex);
+      if (context) free_sd_ctx(context);
+      context = nullptr;
+    };
+    try {
+      if (cancelled.load()) throw std::runtime_error("Video generation stopped.");
+      std::string preferred;
+      sd_ctx_t *loaded = loadContext(request, preferred);
       {
         std::lock_guard<std::mutex> guard(contextMutex);
         context = loaded;

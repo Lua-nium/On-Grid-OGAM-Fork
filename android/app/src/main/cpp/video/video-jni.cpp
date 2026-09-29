@@ -116,3 +116,64 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
   }
   if (owner) env->DeleteGlobalRef(owner);
 }
+
+extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeLoadImage(
+  JNIEnv *env, jobject, jstring path, jstring weight, jstring vae, jstring llm, jint threads, jboolean cpuOnly) {
+  try {
+    offgrid::VideoRequest request{};
+    request.weight = string(env, weight); request.vae = string(env, vae); request.llm = string(env, llm);
+    request.threads = threads; request.cpuOnly = cpuOnly;
+    runtime.loadImage(request, string(env, path));
+  } catch (const std::exception &error) {
+    auto klass = env->FindClass("java/lang/IllegalStateException");
+    if (klass) { env->ThrowNew(klass, error.what()); env->DeleteLocalRef(klass); }
+  }
+}
+extern "C" JNIEXPORT jstring JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeImagePath(JNIEnv *env, jobject) {
+  return env->NewStringUTF(runtime.loadedImagePath().c_str());
+}
+extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeUnloadImage(JNIEnv *env, jobject) {
+  try { runtime.unloadImage(); }
+  catch (const std::exception &error) {
+    auto klass = env->FindClass("java/lang/IllegalStateException");
+    if (klass) { env->ThrowNew(klass, error.what()); env->DeleteLocalRef(klass); }
+  }
+}
+extern "C" JNIEXPORT jbyteArray JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeGenerateImage(
+  JNIEnv *env, jobject self, jstring prompt, jstring negative, jint width, jint height, jint steps, jdouble guidance, jdouble seed) {
+  jbyteArray output = nullptr;
+  jobject owner = nullptr;
+  try {
+    offgrid::VideoRequest request{};
+    request.prompt = string(env, prompt); request.negative = string(env, negative);
+    request.width = width; request.height = height; request.steps = steps; request.guidance = guidance; request.seed = seed;
+    JavaVM *vm = nullptr;
+    if (env->GetJavaVM(&vm) != JNI_OK) throw std::runtime_error("Could not access the image host.");
+    owner = env->NewGlobalRef(self);
+    if (!owner) throw std::runtime_error("Could not retain the image host.");
+    auto klass = env->GetObjectClass(self);
+    auto progress = env->GetMethodID(klass, "imageProgress", "(II)V");
+    env->DeleteLocalRef(klass);
+    if (!progress) throw std::runtime_error("Missing image progress callback.");
+    runtime.image(request, [&](int step, int total) {
+      AttachedEnv thread(vm);
+      if (!thread.env) { runtime.cancel(); return; }
+      thread.env->CallVoidMethod(owner, progress, step, total);
+      if (thread.env->ExceptionCheck()) { thread.env->ExceptionClear(); runtime.cancel(); }
+    }, [&](const sd_image_t &image) {
+      const uint64_t size = uint64_t(image.width) * image.height * image.channel;
+      if (!image.data || image.width != uint32_t(width) || image.height != uint32_t(height) || image.channel != 3 || size > INT32_MAX)
+        throw std::runtime_error("The image engine returned invalid pixels.");
+      output = env->NewByteArray(static_cast<jsize>(size));
+      if (!output) throw std::runtime_error("Not enough memory to save the image.");
+      env->SetByteArrayRegion(output, 0, size, reinterpret_cast<jbyte *>(image.data));
+    });
+  } catch (const std::exception &error) {
+    if (!env->ExceptionCheck()) {
+      auto klass = env->FindClass("java/lang/IllegalStateException");
+      if (klass) { env->ThrowNew(klass, error.what()); env->DeleteLocalRef(klass); }
+    }
+  }
+  if (owner) env->DeleteGlobalRef(owner);
+  return output;
+}

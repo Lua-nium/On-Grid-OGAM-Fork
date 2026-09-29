@@ -28,7 +28,7 @@ RCT_EXPORT_MODULE(VideoGenerationModule)
   return self;
 }
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
-- (NSArray<NSString *> *)supportedEvents { return @[@"VideoGenerationProgress"]; }
+- (NSArray<NSString *> *)supportedEvents { return @[@"VideoGenerationProgress", @"SDImageProgress"]; }
 - (void)startObserving { _listeners = YES; }
 - (void)stopObserving { _listeners = NO; }
 - (void)backgrounded {
@@ -105,6 +105,86 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
       }
     });
     }];
+  });
+}
+RCT_REMAP_METHOD(getLoadedImagePath, imagePathWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  auto path = _runtime.loadedImagePath(); resolve(path.empty() ? nil : @(path.c_str()));
+}
+RCT_REMAP_METHOD(loadImageModel, loadImage:(NSDictionary *)input resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self->_busy) { reject(@"IMAGE_BUSY", @"Image or video generation is running.", nil); return; }
+    self->_busy = YES; self->_runtime.cancelled.store(false);
+    dispatch_async(self->_worker, ^{
+      NSString *failure = nil;
+      try {
+        offgrid::VideoRequest request{};
+        request.weight = [input[@"weight"] UTF8String]; request.vae = [input[@"vae"] UTF8String];
+        request.llm = [input[@"llm"] UTF8String]; request.threads = [input[@"threads"] intValue]; request.cpuOnly = [input[@"cpuOnly"] boolValue];
+        self->_runtime.loadImage(request, [input[@"modelPath"] UTF8String]);
+      } catch (const std::exception &error) { failure = @(error.what()); }
+      dispatch_async(dispatch_get_main_queue(), ^{
+        self->_busy = NO;
+        if (failure) reject(@"IMAGE_LOAD_FAILED", failure, nil); else resolve(@YES);
+      });
+    });
+  });
+}
+RCT_REMAP_METHOD(unloadImageModel, unloadImageWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self->_busy) { reject(@"IMAGE_BUSY", @"Image or video generation is running.", nil); return; }
+    self->_busy = YES;
+    dispatch_async(self->_worker, ^{
+      NSString *failure = nil;
+      try { self->_runtime.unloadImage(); } catch (const std::exception &error) { failure = @(error.what()); }
+      dispatch_async(dispatch_get_main_queue(), ^{
+        self->_busy = NO;
+        if (failure) reject(@"IMAGE_UNLOAD_FAILED", failure, nil); else resolve(@YES);
+      });
+    });
+  });
+}
+RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self->_busy) { reject(@"IMAGE_BUSY", @"Image or video generation is running.", nil); return; }
+    self->_busy = YES; self->_runtime.cancelled.store(false);
+    dispatch_async(self->_worker, ^{
+      @autoreleasepool {
+        NSString *output = input[@"outputPath"];
+        NSString *failure = nil;
+        try {
+          offgrid::VideoRequest request{};
+          request.prompt = [input[@"prompt"] UTF8String]; request.negative = [input[@"negativePrompt"] UTF8String];
+          request.width = [input[@"width"] intValue]; request.height = [input[@"height"] intValue];
+          request.steps = [input[@"steps"] intValue]; request.guidance = [input[@"guidanceScale"] floatValue]; request.seed = [input[@"seed"] longLongValue];
+          if (request.width < 64 || request.width > 2048 || request.height < 64 || request.height > 2048 || request.width % 16 || request.height % 16)
+            throw std::runtime_error("Image dimensions are not supported.");
+          self->_runtime.image(request, [&](int step, int total) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+              if (self->_listeners) [self sendEventWithName:@"SDImageProgress" body:@{@"step":@(step), @"totalSteps":@(total), @"progress":@(total > 0 ? double(step) / total : 0)}];
+            });
+          }, [&](const sd_image_t &image) {
+            if (!image.data || image.channel != 3 || image.width != request.width || image.height != request.height)
+              throw std::runtime_error("The image engine returned invalid pixels.");
+            CFDataRef data = CFDataCreate(kCFAllocatorDefault, image.data, image.width * image.height * 3);
+            CGDataProviderRef provider = data ? CGDataProviderCreateWithCFData(data) : nullptr;
+            CGColorSpaceRef color = CGColorSpaceCreateDeviceRGB();
+            CGImageRef bitmap = provider ? CGImageCreate(image.width, image.height, 8, 24, image.width * 3, color, kCGImageAlphaNone, provider, nullptr, false, kCGRenderingIntentDefault) : nullptr;
+            NSData *png = bitmap ? UIImagePNGRepresentation([UIImage imageWithCGImage:bitmap]) : nil;
+            if (bitmap) CGImageRelease(bitmap);
+            CGColorSpaceRelease(color); if (provider) CGDataProviderRelease(provider); if (data) CFRelease(data);
+            if (!png || ![png writeToFile:output atomically:YES]) throw std::runtime_error("Could not save the image.");
+          });
+          if (self->_runtime.cancelled.load()) throw std::runtime_error("Image generation stopped.");
+        } catch (const std::exception &error) {
+          failure = @(error.what()); [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+          self->_busy = NO;
+          if (failure) reject(@"IMAGE_FAILED", failure, nil);
+          else resolve(@{@"id":input[@"id"], @"imagePath":output, @"width":input[@"width"], @"height":input[@"height"], @"seed":input[@"seed"]});
+        });
+      }
+    });
   });
 }
 - (void)startContinuedWork:(dispatch_block_t)work {
