@@ -5,7 +5,7 @@ import { useAppStore } from '../../stores';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
 import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
-import { fetchAvailableModels, HFImageModel, guessStyle } from '../../services/huggingFaceModelBrowser';
+import { fetchAvailableModels, getSDImageModels, HFImageModel, guessStyle } from '../../services/huggingFaceModelBrowser';
 import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
 import { ImageModelRecommendation } from '../../types';
 import { BackendFilter, ImageFilterDimension, ImageModelDescriptor } from './types';
@@ -55,15 +55,15 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     try {
       if (Platform.OS === 'ios') {
         const coremlModels = await fetchAvailableCoreMLModels(forceRefresh);
-        setAvailableHFModels(coremlModels.map(m => ({
+        setAvailableHFModels([...getSDImageModels(), ...coremlModels.map(m => ({
           id: m.id, name: m.name, displayName: m.displayName, backend: 'coreml' as any,
           fileName: m.fileName, downloadUrl: m.downloadUrl, size: m.size, repo: m.repo,
           _coreml: true, _coremlFiles: m.files,
           _coremlAttentionVariant: m.attentionVariant,
-        })));
+        }))]);
       } else {
         const socInfo = await hardwareService.getSoCInfo();
-        setAvailableHFModels(await fetchAvailableModels(forceRefresh, { skipQnn: !socInfo.hasNPU }));
+        setAvailableHFModels([...getSDImageModels(), ...await fetchAvailableModels(forceRefresh, { skipQnn: !socInfo.hasNPU })]);
       }
     } catch (error: any) {
       setHfModelsError(error?.message || 'Failed to fetch models');

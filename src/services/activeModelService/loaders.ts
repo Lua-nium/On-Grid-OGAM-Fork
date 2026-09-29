@@ -294,7 +294,8 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
           ctx.model.modelPath,
           ctx.imageThreads,
           {
-            backend: 'auto',
+            backend: ctx.model.backend === 'sd' ? 'sd' : 'auto',
+            modelId: ctx.model.id,
             cpuOnly: ctx.cpuOnly,
             attentionVariant: ctx.model.attentionVariant,
             preferGpu: ctx.preferGpu,

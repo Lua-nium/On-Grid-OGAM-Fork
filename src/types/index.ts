@@ -171,7 +171,7 @@ export interface ImageModelRecommendation {
   recommendedModels?: string[];
   bannerText: string;
   warning?: string;
-  compatibleBackends: Array<'mnn' | 'qnn' | 'coreml'>;
+  compatibleBackends: Array<'mnn' | 'qnn' | 'coreml' | 'sd'>;
 }
 
 // Hardware-related types
@@ -373,7 +373,7 @@ export interface ONNXImageModel {
   downloadedAt: string;
   size: number;
   style?: string;
-  backend?: 'mnn' | 'qnn' | 'coreml';
+  backend?: 'mnn' | 'qnn' | 'coreml' | 'sd';
   attentionVariant?: 'split_einsum' | 'original';
 }
 

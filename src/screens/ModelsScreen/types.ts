@@ -5,7 +5,7 @@ import { ModelSource } from '../../types';
 import { RootStackParamList, MainTabParamList } from '../../navigation/types';
 export type { ImageModelDescriptor } from '../../services/imageModelDownloadTypes';
 
-export type BackendFilter = 'all' | 'mnn' | 'qnn' | 'coreml';
+export type BackendFilter = 'all' | 'mnn' | 'qnn' | 'coreml' | 'sd';
 
 export type CredibilityFilter = 'all' | ModelSource;
 export type ModelTypeFilter = 'all' | 'text' | 'vision' | 'code' | 'image-gen';

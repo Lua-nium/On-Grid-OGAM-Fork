@@ -1,8 +1,12 @@
+import { CATALOG } from '@offgrid/models';
+import type { ImageModelDescriptor } from './imageModelDownloadTypes';
+
 export interface HFImageModel {
   id: string;
   name: string;
   displayName: string;
-  backend: 'mnn' | 'qnn';
+  backend: ImageModelDescriptor['backend'];
+  huggingFaceFiles?: ImageModelDescriptor['huggingFaceFiles'];
   variant?: string;
   downloadUrl: string;
   fileName: string;
@@ -140,4 +144,30 @@ export function guessStyle(name: string): string {
     return 'photorealistic';
   }
   return 'anime';
+}
+
+/** The shared catalog owns the Qwen pack, including pinned companion files. */
+export function getSDImageModels(): HFImageModel[] {
+  return CATALOG.filter(model => model.id === 'leejet/Qwen-Image-2.1-GGUF').map(model => ({
+    id: `sd-${model.id.replaceAll('/', '--')}`,
+    name: model.name, displayName: model.name, backend: 'sd' as const,
+    repo: model.id, fileName: model.files[0].name, downloadUrl: model.files[0].url,
+    size: model.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0),
+    huggingFaceFiles: model.files.map(file => ({ path: file.name, size: file.sizeBytes ?? 0, downloadUrl: file.url, sha256: file.sha256 })),
+  }));
+}
+
+export function resolveSDImagePack(modelId: string, modelPath: string) {
+  const model = getSDImageModels().find(candidate => candidate.id === modelId);
+  if (!model?.huggingFaceFiles) throw new Error('This image model pack is not supported.');
+  const required = (pattern: RegExp) => {
+    const file = model.huggingFaceFiles!.find(part => pattern.test(part.path));
+    if (!file) throw new Error('The image model pack is incomplete.');
+    return `${modelPath}/${file.path}`;
+  };
+  return {
+    weight: required(/^qwen_image_2\.1-.*\.gguf$/i),
+    vae: required(/vae.*\.safetensors$/i),
+    llm: required(/^Qwen3VL-.*\.gguf$/i),
+  };
 }

@@ -26,7 +26,7 @@ interface ImageMetadata {
   imageModelDescription: string;
   imageModelSize: number;
   imageModelStyle?: string;
-  imageModelBackend?: 'mnn' | 'qnn' | 'coreml';
+  imageModelBackend?: 'mnn' | 'qnn' | 'coreml' | 'sd';
   imageModelRepo?: string;
   imageModelAttentionVariant?: string;
   imageModelDownloadUrl?: string;
@@ -43,6 +43,10 @@ type MultifileRuntime = {
 
 const activeMultifileDownloads = new Map<string, MultifileRuntime>();
 const USER_CANCELLED_ERROR = 'user_cancelled';
+
+export function isMultifileImageDownloadActive(modelId: string): boolean {
+  return activeMultifileDownloads.has(modelId);
+}
 
 /** Build a synthetic downloadId for multi-file flows that don't go through WorkManager. */
 function makeMultifileId(modelId: string): string {

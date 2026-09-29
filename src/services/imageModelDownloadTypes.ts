@@ -16,7 +16,7 @@ export interface ImageModelDescriptor {
   downloadUrl: string;
   size: number;
   style: string;
-  backend: 'mnn' | 'qnn' | 'coreml';
+  backend: 'mnn' | 'qnn' | 'coreml' | 'sd';
   variant?: string;
   huggingFaceRepo?: string;
   huggingFaceFiles?: { path: string; size: number; downloadUrl?: string; sha256?: string }[];

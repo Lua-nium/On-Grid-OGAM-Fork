@@ -225,10 +225,10 @@ class ImageGenerationService {
     // the single cross-platform signal (so the notice shows once on every device);
     // the OpenCL kernel-cache check is an extra Android signal in case the cache was
     // cleared after the flag was set.
-    let isFirstRun = !useAppStore
+    let isFirstRun = activeImageModel.backend !== 'sd' && !useAppStore
       .getState()
       .warmedImageModels.includes(activeImageModel.id);
-    if (useOpenCL) {
+    if (useOpenCL && activeImageModel.backend !== 'sd') {
       try {
         const hasCache = await onnxImageGeneratorService.hasKernelCache(
           activeImageModel.modelPath,
@@ -242,7 +242,7 @@ class ImageGenerationService {
 
     this.updateState({
       phase: 'generating',
-      status: isFirstRun
+      status: activeImageModel.backend === 'sd' ? 'Processing image prompt...' : isFirstRun
         ? 'Optimizing GPU for your device (~120s, one-time)...'
         : 'Starting image generation...',
     });

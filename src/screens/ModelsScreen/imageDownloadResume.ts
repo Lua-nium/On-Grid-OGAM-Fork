@@ -5,7 +5,7 @@ import { modelManager, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
-import { ImageDownloadDeps, registerAndNotify, proceedWithDownload, validateMultifileComplete } from '../../services/imageDownloadActions';
+import { ImageDownloadDeps, registerAndNotify, proceedWithDownload, validateMultifileComplete, isMultifileImageDownloadActive } from '../../services/imageDownloadActions';
 import type { ImageModelDescriptor } from '../../services/imageModelDownloadTypes';
 import { imageDescriptorFromMetadata } from './imageDescriptor';
 import { validateImageModelDir, ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
@@ -189,6 +189,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
 
 async function resumeMultifileDownload(ctx: ResumeCtx): Promise<void> {
   const { entry, modelId, metadata, deps } = ctx;
+  if (isMultifileImageDownloadActive(modelId)) return;
   const modelDir = `${modelManager.getImageModelsDirectory()}/${modelId}`;
   const modelDirExists = await RNFS.exists(modelDir);
   if (!modelDirExists) {

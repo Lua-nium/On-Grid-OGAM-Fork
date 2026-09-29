@@ -1,3 +1,4 @@
+import { getSDImageModels } from '../huggingFaceModelBrowser';
 import RNFS from 'react-native-fs';
 import { statFile } from '../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
@@ -84,7 +85,8 @@ export async function cleanupMMProjEntries(modelsDir: string): Promise<number> {
   return removedCount;
 }
 
-function detectBackend(dirName: string): 'mnn' | 'qnn' | 'coreml' {
+function detectBackend(dirName: string): 'mnn' | 'qnn' | 'coreml' | 'sd' {
+  if (getSDImageModels().some(model => model.id === dirName)) return 'sd';
   if (dirName.includes('qnn') || dirName.includes('8gen') || dirName.includes('npu')) return 'qnn';
   if (dirName.includes('coreml')) return 'coreml';
   return 'mnn';
@@ -138,14 +140,14 @@ async function isValidZip(zipPath: string): Promise<boolean> {
 /** Build the ONNXImageModel record for a recovered on-disk dir (coreml resolves its inner model dir). */
 async function buildRecoveredImageModel(
   item: { name: string; path: string },
-  backend: 'mnn' | 'qnn' | 'coreml',
+  backend: 'mnn' | 'qnn' | 'coreml' | 'sd',
 ): Promise<ONNXImageModel> {
   let modelPath = item.path;
   if (backend === 'coreml') modelPath = await resolveCoreMLModelDir(item.path).catch(() => item.path);
   const totalSize = await getDirSize(item.path);
   return {
     id: item.name,
-    name: item.name.replaceAll('_', ' '),
+    name: getSDImageModels().find(model => model.id === item.name)?.displayName ?? item.name.replaceAll('_', ' '),
     description: '',
     modelPath,
     size: totalSize,
