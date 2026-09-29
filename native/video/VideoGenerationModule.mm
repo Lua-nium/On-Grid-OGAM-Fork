@@ -72,11 +72,15 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
         NSError *failure = nil;
         try {
           offgrid::VideoRequest request{
-            [input[@"weight"] UTF8String], [input[@"vae"] UTF8String], [input[@"encoder"] UTF8String],
+            [input[@"weight"] UTF8String], [input[@"vae"] UTF8String], [(input[@"encoder"] ?: @"") UTF8String],
             [input[@"prompt"] UTF8String], [input[@"negativePrompt"] UTF8String],
             [input[@"width"] intValue], [input[@"height"] intValue], [input[@"frames"] intValue],
             [input[@"fps"] intValue], [input[@"steps"] intValue], [input[@"guidance"] floatValue], [input[@"seed"] longLongValue]
           };
+          request.llm = [(input[@"llm"] ?: @"") UTF8String];
+          request.embeddings = [(input[@"embeddings"] ?: @"") UTF8String];
+          request.audioVae = [(input[@"audioVae"] ?: @"") UTF8String];
+          request.flowShift = [input[@"flowShift"] floatValue];
           [self emitStage:@"preparing" step:0 total:request.steps];
           self->_runtime.run(request, [&](int step, int total) {
             [self emitStage:@"generating" step:step total:total];

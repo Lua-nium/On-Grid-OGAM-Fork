@@ -5,6 +5,7 @@
 #include "stable-diffusion.h"
 #endif
 #include <atomic>
+#include <limits>
 #include <functional>
 #include <mutex>
 #include <stdexcept>
@@ -16,6 +17,8 @@ struct VideoRequest {
   int width, height, frames, fps, steps;
   float guidance;
   int64_t seed;
+  std::string llm, embeddings, audioVae;
+  float flowShift = 0;
 };
 // One instance per process. Both host bridges use the same native lifecycle.
 class VideoRuntime {
@@ -50,6 +53,9 @@ public:
       config.diffusion_model_path = request.weight.c_str();
       config.vae_path = request.vae.c_str();
       config.t5xxl_path = request.encoder.c_str();
+      config.llm_path = request.llm.c_str();
+      config.embeddings_connectors_path = request.embeddings.c_str();
+      config.audio_vae_path = request.audioVae.c_str();
       config.enable_mmap = true;
       config.diffusion_flash_attn = true;
       config.auto_fit = true;
@@ -72,7 +78,7 @@ public:
       params.video_frames = request.frames; params.fps = request.fps; params.seed = request.seed;
       params.sample_params.sample_steps = request.steps;
       params.sample_params.guidance.txt_cfg = request.guidance;
-      params.sample_params.flow_shift = 3;
+      params.sample_params.flow_shift = request.flowShift > 0 ? request.flowShift : std::numeric_limits<float>::infinity();
       params.sample_params.sample_method = EULER_SAMPLE_METHOD;
       params.sample_params.scheduler = sd_get_default_scheduler(loaded, EULER_SAMPLE_METHOD);
       params.vae_tiling_params.enabled = true;

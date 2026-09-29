@@ -31,10 +31,14 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
 extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeCancel(JNIEnv *, jobject) { runtime.cancel(); }
 extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeGenerate(
   JNIEnv *env, jobject self, jstring weight, jstring vae, jstring encoder, jstring prompt, jstring negative,
-  jint width, jint height, jint frames, jint fps, jint steps, jdouble guidance, jdouble seed) {
+  jint width, jint height, jint frames, jint fps, jint steps, jdouble guidance, jdouble seed, jstring llm, jstring embeddings, jstring audioVae, jdouble flowShift) {
   jobject owner = nullptr;
   try {
     offgrid::VideoRequest request{string(env, weight), string(env, vae), string(env, encoder), string(env, prompt), string(env, negative), width, height, frames, fps, steps, (float)guidance, (int64_t)seed};
+    request.llm = string(env, llm);
+    request.embeddings = string(env, embeddings);
+    request.audioVae = string(env, audioVae);
+    request.flowShift = (float)flowShift;
     JavaVM *vm = nullptr;
     if (env->GetJavaVM(&vm) != JNI_OK) throw std::runtime_error("Could not access the video host.");
     owner = env->NewGlobalRef(self);

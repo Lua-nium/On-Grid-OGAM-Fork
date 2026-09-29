@@ -266,7 +266,7 @@ class VideoGenerationService {
     const primary =
       server?.mediaModels?.video ??
       model!.files.find(f => f.role === 'primary')!.name;
-    let request = resolveVideoRequest(input, {
+    let request = resolveVideoRequest({ ...input, model: primary }, {
       ...(app.settings.videoParams?.[primary] ??
         app.settings.videoParams?.default),
       seed: app.settings.videoSeed ?? -1,

@@ -1,6 +1,8 @@
 import { NativeEventEmitter, NativeModules } from 'react-native';
+import { videoArchitecture } from '@offgrid/models';
 import type {
   ResolvedVideoRequest,
+  VideoModelPack,
   VideoGenerationUpdateContract,
 } from '@offgrid/models';
 const native = NativeModules.VideoGenerationModule;
@@ -11,7 +13,7 @@ export const videoGenerator = {
   },
   async generate(
     request: ResolvedVideoRequest,
-    pack: { weight: string; vae: string; encoder: string },
+    pack: VideoModelPack,
     outputPath: string,
     onUpdate: (update: VideoGenerationUpdateContract) => void,
   ): Promise<string> {
@@ -40,7 +42,14 @@ export const videoGenerator = {
       },
     );
     try {
-      return (await native.generate({ ...request, ...pack, outputPath })).path;
+      return (
+        await native.generate({
+          ...request,
+          ...pack,
+          outputPath,
+          flowShift: videoArchitecture(pack.weight)?.startsWith('wan') ? 3 : 0,
+        })
+      ).path;
     } finally {
       listener.remove();
     }

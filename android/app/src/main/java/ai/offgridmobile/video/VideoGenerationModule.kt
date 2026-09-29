@@ -17,7 +17,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
     private val cancelled = AtomicBoolean(false)
     private var encoder: VideoEncoder? = null
     override fun getName() = "VideoGenerationModule"
-    private external fun nativeGenerate(weight: String, vae: String, encoder: String, prompt: String, negative: String, width: Int, height: Int, frames: Int, fps: Int, steps: Int, guidance: Double, seed: Double)
+    private external fun nativeGenerate(weight: String, vae: String, encoder: String, prompt: String, negative: String, width: Int, height: Int, frames: Int, fps: Int, steps: Int, guidance: Double, seed: Double, llm: String, embeddings: String, audioVae: String, flowShift: Double)
     private external fun nativeCancel()
     private external fun nativePrepare()
     @ReactMethod fun addListener(name: String) {}
@@ -54,9 +54,13 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
                 emit("preparing", 0, input.getInt("steps"))
                 VideoEncoder(destination.path, input.getInt("width"), input.getInt("height"), input.getInt("fps")).use { writer ->
                     encoder = writer
-                    nativeGenerate(checkNotNull(input.getString("weight")), checkNotNull(input.getString("vae")), checkNotNull(input.getString("encoder")),
+                    nativeGenerate(checkNotNull(input.getString("weight")), checkNotNull(input.getString("vae")), if (input.hasKey("encoder")) input.getString("encoder") ?: "" else "",
                         checkNotNull(input.getString("prompt")), input.getString("negativePrompt") ?: "", input.getInt("width"), input.getInt("height"),
-                        input.getInt("frames"), input.getInt("fps"), input.getInt("steps"), input.getDouble("guidance"), input.getDouble("seed"))
+                        input.getInt("frames"), input.getInt("fps"), input.getInt("steps"), input.getDouble("guidance"), input.getDouble("seed"),
+                        if (input.hasKey("llm")) input.getString("llm") ?: "" else "",
+                        if (input.hasKey("embeddings")) input.getString("embeddings") ?: "" else "",
+                        if (input.hasKey("audioVae")) input.getString("audioVae") ?: "" else "",
+                        input.getDouble("flowShift"))
                     writer.finish { cancelled.get() }
                 }
                 check(destination.length() > 0) { "Video encoder produced no file." }

@@ -2,8 +2,8 @@ import RNFS from 'react-native-fs';
 import type { ModelEntry } from '@offgrid/models';
 import {
   videoPackError,
-  videoVaeFilename,
-  VIDEO_ENCODER_FILENAME,
+  videoPackFiles,
+  type VideoModelPack,
 } from '@offgrid/models';
 
 export interface VideoModel extends ModelEntry {
@@ -42,9 +42,10 @@ export async function resolveVideoPack(
       throw new Error(`Video model checksum failed: ${file.name}`);
   }
   const weight = model.files.find(f => f.role === 'primary')!.name;
-  return {
-    weight: `${directory}/${weight}`,
-    vae: `${directory}/${videoVaeFilename(weight)!}`,
-    encoder: `${directory}/${VIDEO_ENCODER_FILENAME}`,
-  };
+  return Object.fromEntries(
+    Object.entries(videoPackFiles(weight)!).map(([role, name]) => [
+      role,
+      `${directory}/${name}`,
+    ]),
+  ) as unknown as VideoModelPack;
 }

@@ -2,7 +2,7 @@ import { Accordion } from '../Accordion';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import React, { useEffect, useState } from 'react';
 import { Text, TextInput, View, Switch } from 'react-native';
-import { VIDEO_DEFAULTS } from '@offgrid/models';
+import { videoModelDefaults, videoModelLimits } from '@offgrid/models';
 import { useAppStore } from '../../stores';
 import { useTheme, useThemedStyles } from '../../theme';
 import { SliderSetting } from '../SliderSetting';
@@ -37,7 +37,20 @@ export const VideoGenerationSection: React.FC = () => {
     'default';
   const saved =
     settings.videoParams?.[key] ?? settings.videoParams?.default ?? {};
-  const values = { ...VIDEO_DEFAULTS, ...saved };
+  const limits = videoModelLimits(key);
+  const values = { ...videoModelDefaults(key), ...saved };
+  const controls = CONTROLS.map(control => ({
+    ...control,
+    ...(control.key === 'width'
+      ? { max: limits.widthMax, step: limits.sizeStep }
+      : {}),
+    ...(control.key === 'height'
+      ? { max: limits.heightMax, step: limits.sizeStep }
+      : {}),
+    ...(control.key === 'frames'
+      ? { max: limits.framesMax, step: limits.frameStep }
+      : {}),
+  }));
   const [seedText, setSeedText] = useState(
     settings.videoSeed === -1 ? '' : String(settings.videoSeed ?? ''),
   );
@@ -62,7 +75,7 @@ export const VideoGenerationSection: React.FC = () => {
       <Text style={styles.settingDescription}>
         {remoteName ?? model?.name ?? 'Default video settings'}
       </Text>
-      {CONTROLS.map(control => (
+      {controls.map(control => (
         <SliderSetting
           key={control.key}
           compact
@@ -79,10 +92,12 @@ export const VideoGenerationSection: React.FC = () => {
                   ...saved,
                   [control.key]:
                     control.key === 'frames'
-                      ? 1 + Math.round((value - 1) / 4) * 4
+                      ? 1 +
+                        Math.round((value - 1) / limits.frameStep) *
+                          limits.frameStep
                       : control.key === 'width' || control.key === 'height'
-                        ? Math.round(value / 16) * 16
-                        : value,
+                      ? Math.round(value / limits.sizeStep) * limits.sizeStep
+                      : value,
                 },
               },
             })
