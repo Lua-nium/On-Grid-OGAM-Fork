@@ -210,5 +210,5 @@ def prepareVideoRuntime = tasks.register("prepareVideoRuntime", Exec) {
     outputs.dir(new File(videoRoot, ".video-build/hexagon-assets/video-hexagon"))
 }
 tasks.configureEach { task ->
-    if (task.name.startsWith("configureCMake")) task.dependsOn(prepareVideoRuntime)
+    if (task.name.startsWith("configureCMake") || (task.name.startsWith("merge") && task.name.endsWith("Assets"))) task.dependsOn(prepareVideoRuntime)
 }
