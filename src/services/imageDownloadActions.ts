@@ -336,6 +336,7 @@ export async function downloadHuggingFaceModel(
     const files = modelInfo.huggingFaceFiles.map((file) => ({
       relativePath: file.path,
       size: file.size,
+      expectedSize: modelInfo.backend === 'sd' ? file.size : undefined,
       url: file.downloadUrl ?? `https://huggingface.co/${modelInfo.huggingFaceRepo}/resolve/main/${file.path}`,
       sha256: file.sha256,
     }));

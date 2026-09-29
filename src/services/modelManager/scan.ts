@@ -256,7 +256,10 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
       const sdFiles = item.name.startsWith('sd-') ? getSDImagePackFiles((await RNFS.readDir(item.path)).filter(file => file.isFile()).map(file => file.name), item.name) : null;
       if (item.name.startsWith('sd-')) {
         try {
-          if (!sdFiles) continue;
+          // A remote variant's expected weight bytes/hash live in its download
+          // metadata, not the catalog. Let Resume validate that descriptor; a
+          // nonempty partial GGUF alone cannot prove this pack is complete.
+          if (!sdFiles || sdFiles.some(file => !file.sha256)) continue;
           await validateMultifileComplete(item.path, sdFiles.map(file => ({
             relativePath: file.path, sha256: file.sha256,
           })));
