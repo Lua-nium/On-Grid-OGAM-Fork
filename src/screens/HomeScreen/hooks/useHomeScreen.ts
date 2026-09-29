@@ -83,6 +83,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     downloadedImageModels,
     setDownloadedImageModels,
     activeImageModelId,
+    activeVideoModelId,
     setActiveImageModelId: _setActiveImageModelId,
     deviceInfo,
     setDeviceInfo,
@@ -258,8 +259,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const handleEjectAll = () => {
-    const hasLocalModels = activeModelId || activeImageModelId;
-    const hasRemoteModel = activeRemoteTextModelId || activeRemoteImageModelId;
+    const hasLocalModels = activeModelId || activeImageModelId || activeVideoModelId;
+    const hasRemoteModel = activeRemoteTextModelId || activeRemoteImageModelId || activeRemoteMediaServerIds.video;
     if (!hasLocalModels && !hasRemoteModel) {
       return;
     }
@@ -310,8 +311,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const startNewChat = () => {
-    // Allow image-only users to start a chat; conversation is lazily created in useChatScreen
-    if (!activeTextModelId && !activeImageModelId) {
+    // Media-only chats are created when their first generation starts.
+    if (!activeTextModelId && !activeImageModelId && !activeVideoModelId && !activeRemoteMediaServerIds.video) {
       return;
     }
     navigation.navigate('Chat', {});

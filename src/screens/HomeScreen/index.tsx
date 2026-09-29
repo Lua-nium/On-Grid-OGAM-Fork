@@ -129,6 +129,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
   // Downloaded-model counts shown in the Models card (replaces the old stats row).
   const modelCounts: Partial<Record<ModelRowType, number>> = {
+    video: useAppStore(s => s.downloadedVideoModels.length),
     text: downloadedModels.length,
     image: downloadedImageModels.length,
     speech: whisperPresentCount,
@@ -221,7 +222,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </AnimatedEntry>
 
           {/* New Chat Button */}
-          {activeTextModelId || activeImageModelId ? (
+          {activeTextModelId || activeImageModelId || modelLabels.video ? (
             <Button
               title="New Chat"
               onPress={startNewChat}
@@ -232,7 +233,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Card style={styles.setupCard} testID="setup-card">
               <Text style={styles.setupText}>
                 {downloadedModels.length > 0 || remoteTextModels.length > 0
-                  ? 'Select a text or image model to start'
+                  ? 'Select a text, image, or video model to start'
                   : 'Choose a model here or on your network.'}
               </Text>
               <View style={styles.setupActions}>
