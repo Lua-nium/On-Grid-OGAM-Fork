@@ -4,6 +4,8 @@
 #import <BackgroundTasks/BackgroundTasks.h>
 #import "VideoEncoder.h"
 #include "common/VideoRuntime.hpp"
+#include <cstdio>
+#include <cstring>
 
 static BOOL OGSaveRgbPng(const sd_image_t &image, NSString *output) {
   if (!image.data || image.channel != 3) return NO;
@@ -119,6 +121,15 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
       @autoreleasepool {
         NSString *output = input[@"outputPath"];
         NSError *failure = nil;
+        // Keep targeted runtime diagnostics in the same persistent lifecycle log.
+        sd_set_log_callback([](enum sd_log_level_t, const char *text, void *data) {
+          if (!text) return;
+          std::fputs(text, stderr);
+          if (!std::strstr(text, "Wan VAE decode backend=")) return;
+          VideoGenerationModule *owner = (__bridge VideoGenerationModule *)data;
+          NSString *detail = [NSString stringWithUTF8String:text];
+          dispatch_async(dispatch_get_main_queue(), ^{ [owner logLifecycle:detail]; });
+        }, (__bridge void *)self);
         try {
           offgrid::VideoRequest request{
             [input[@"weight"] UTF8String], [input[@"vae"] UTF8String], [(input[@"encoder"] ?: @"") UTF8String],
@@ -159,6 +170,7 @@ RCT_REMAP_METHOD(generate, generate:(NSDictionary *)input resolver:(RCTPromiseRe
           failure = [NSError errorWithDomain:@"OffgridVideo" code:1 userInfo:@{NSLocalizedDescriptionKey:@(error.what())}];
           [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
         }
+        sd_set_log_callback(nullptr, nullptr);
         dispatch_async(dispatch_get_main_queue(), ^{
           self->_busy = NO;
           [self restoreScreenIdleTimer];

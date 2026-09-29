@@ -249,6 +249,13 @@ public:
       params.vae_tiling_params.extra_tiling_args = "temporal_tile_frames=1";
       conditioning(preferred.empty() ? "cpu" : "npu");
 #else
+      // Wan's stateful decoder retains causal feature caches between temporal
+      // chunks. Bound the graph without dropping frames or changing resolution.
+      const std::string vaeName = request.vae.substr(request.vae.find_last_of("/\\") + 1);
+      if (vaeName == "wan_2.1_vae.safetensors" || vaeName == "wan2.2_vae.safetensors") {
+        params.vae_tiling_params.temporal_tiling = true;
+        params.vae_tiling_params.extra_tiling_args = "temporal_tile_frames=1";
+      }
       conditioning("");
 #endif
       if (!generate_video(loaded, &params, &frames, &count, nullptr, &fps) || !frames || count == 0)
