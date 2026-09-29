@@ -154,6 +154,16 @@ export const AutoSetupScreen: React.FC<Props> = ({
                       />
                     ) : null}
                   </View>
+                  {plan.items[3] && (
+                    <View style={styles.videoFiles}>
+                      <Text style={styles.includesLabel}>VIDEO FILES</Text>
+                      {plan.items[3].payload.files.map(file => (
+                        <Text key={file.name} style={styles.itemSize}>
+                          {file.name} - {formatBytes(file.sizeBytes ?? 0)}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
                   <Text style={styles.total}>
                     {formatBytes(plan.totalBytes)} download
                   </Text>
@@ -284,6 +294,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     flexWrap: 'wrap' as const,
     gap: SPACING.sm,
   },
+  videoFiles: { gap: SPACING.xs },
   planItem: {
     flexBasis: '45%' as const,
     flexGrow: 1,
