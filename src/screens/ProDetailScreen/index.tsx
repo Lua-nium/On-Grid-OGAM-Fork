@@ -106,7 +106,10 @@ export const ProDetailScreen: React.FC = () => {
           entitlement state where a screen's actions go. */}
       <ScreenHeader
         title="Off Grid AI Pro"
-        onBack={() => navigation.goBack()}
+        onBack={() => {
+          if (navigation.canGoBack()) navigation.goBack();
+          else navigation.replace('Main', { screen: 'HomeTab' });
+        }}
         right={
 <View style={styles.headerActions}>
             {deviceStatus ? (
