@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Linking } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedEntry } from '../AnimatedEntry';
 import { Button } from '../Button';
+import { AnimatedPressable } from '../AnimatedPressable';
 import { selectHasProAccess } from '../../stores/proAccessSlice';
 import { useAppStore } from '../../stores';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -69,25 +70,26 @@ export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro, onDesignPa
           <Text style={styles.desc}>
             Fewer than 50 people? Get free lifetime Pro if your business idea fits.
           </Text>
-          <Button
-            title="See the partner offer"
-            variant="outline"
-            size="small"
-            icon={<Icon name="arrow-right" size={16} color={colors.textSecondary} />}
+          <AnimatedPressable
+            style={styles.linkRow}
+            accessibilityRole="button"
+            accessibilityLabel="See the partner offer"
             onPress={onDesignPartners}
-          />
+          >
+            <Text style={styles.linkText}>See the partner offer</Text>
+            <Icon name="chevron-right" size={16} color={colors.primary} />
+          </AnimatedPressable>
         </View>
 
-        <Button
-          title="Get Off Grid AI Desktop"
-          variant="outline"
-          size="small"
-          style={styles.desktopLink}
+        <AnimatedPressable
+          style={[styles.linkRow, styles.desktopLink]}
           onPress={() => Linking.openURL(withUtm(OFF_GRID_DESKTOP_URL, 'pro-upsell')).catch(() => {})}
           accessibilityRole="link"
           accessibilityLabel="Get Off Grid AI Desktop on the website"
-          icon={<Icon name="external-link" size={16} color={colors.textSecondary} />}
-        />
+        >
+          <Text style={styles.linkText}>Get Off Grid AI Desktop</Text>
+          <Icon name="external-link" size={16} color={colors.primary} />
+        </AnimatedPressable>
       </View>
     </AnimatedEntry>
   );
@@ -116,14 +118,30 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   cta: { marginHorizontal: SPACING.lg, marginBottom: SPACING.md },
   partnerOffer: {
     marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.sm,
+    marginBottom: 0,
     paddingTop: SPACING.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    gap: SPACING.xs,
+  },
+  linkRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     gap: SPACING.sm,
+    minHeight: 44,
+    paddingVertical: SPACING.sm,
+  },
+  linkText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.primary,
+    textDecorationLine: 'underline' as const,
+    flex: 1,
   },
   desktopLink: {
     marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
 });

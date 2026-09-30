@@ -11,6 +11,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button, Card } from '../../components';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import {
@@ -202,13 +203,15 @@ export const ProDetailScreen: React.FC = () => {
                 Have fewer than 50 people? If your business idea fits, Pro is free
                 for life, even if we do not build the full solution together.
               </Text>
-              <Button
-                title="See the partner offer"
-                variant="outline"
-                size="small"
-                icon={<Icon name="arrow-right" size={16} color={colors.textSecondary} />}
+              <AnimatedPressable
+                style={styles.partnerLink}
+                accessibilityRole="button"
+                accessibilityLabel="See the partner offer"
                 onPress={() => navigation.navigate('DesignPartners')}
-              />
+              >
+                <Text style={styles.partnerLinkText}>See the partner offer</Text>
+                <Icon name="chevron-right" size={16} color={colors.primary} />
+              </AnimatedPressable>
             </Card>
 
             {/* Ambient pillars */}
@@ -404,7 +407,21 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   partnerDescription: {
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.xs,
+  },
+  partnerLink: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: SPACING.sm,
+    minHeight: 44,
+    paddingVertical: SPACING.sm,
+  },
+  partnerLinkText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.primary,
+    textDecorationLine: 'underline' as const,
+    flex: 1,
   },
   pillarsSection: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.lg },
   sectionLabel: {
