@@ -58,7 +58,7 @@ const PLAN_COPY: Record<
   balanced: { title: 'Balanced', summary: 'Models near the middle of each list.' },
   extreme: {
     title: 'Extreme',
-    summary: 'The largest listed models. Check each size before download.',
+    summary: 'Largest model downloads.',
   },
 };
 

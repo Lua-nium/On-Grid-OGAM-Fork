@@ -110,6 +110,15 @@ export function autoSetupDownloadId(
   return uniformDownloadId(item.kind, item.id);
 }
 
+export function autoSetupItemNeedsAction(
+  item: AutoSetupItem,
+  installedIds: readonly string[],
+): boolean {
+  return item.kind !== 'embedding' || (
+    item.sizeBytes > 0 && !installedIds.includes(autoSetupDownloadId(item))
+  );
+}
+
 function message(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
@@ -211,7 +220,8 @@ export function createAutoSetupSession(
     state.plans[0];
   const selectedItems = (plan: AutoSetupPlan) =>
     [...plan.items, ...(plan.embedding ? [plan.embedding] : [])]
-      .filter(item => state.selectedKinds.includes(item.kind));
+      .filter(item => state.selectedKinds.includes(item.kind) &&
+        autoSetupItemNeedsAction(item, state.installedIds));
 
   const stopActive = async (cancelled: boolean): Promise<void> => {
     const ids = [...activeIds, ...(pendingEmbeddingId ? [pendingEmbeddingId] : [])];
@@ -484,8 +494,9 @@ export function createAutoSetupSession(
     toggleKind(kind) {
       if (state.phase === 'downloading') return;
       const plan = selectedPlan();
-      if (!plan || ![...plan.items, ...(plan.embedding ? [plan.embedding] : [])]
-        .some(item => item.kind === kind)) return;
+      const item = plan && [...plan.items, ...(plan.embedding ? [plan.embedding] : [])]
+        .find(candidate => candidate.kind === kind);
+      if (!item || !autoSetupItemNeedsAction(item, state.installedIds)) return;
       const selectedKinds = state.selectedKinds.includes(kind)
         ? state.selectedKinds.filter(selected => selected !== kind)
         : [...state.selectedKinds, kind];

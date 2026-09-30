@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -11,6 +11,7 @@ import type { RootStackParamList } from '../navigation/types';
 import type { AutoSetupItem, AutoSetupTier } from '../services/autoSetupPlan';
 import {
   autoSetupDownloadId,
+  autoSetupItemNeedsAction,
   createAutoSetupSession,
   type AutoSetupSession,
 } from '../services/autoSetupService';
@@ -60,7 +61,8 @@ export const AutoSetupScreen: React.FC<Props> = ({
     snapshot.plans.find(plan => plan.tier === snapshot.selectedTier) ??
     snapshot.plans[0];
   const selectedItems = [...(selected?.items ?? []), ...(selected?.embedding ? [selected.embedding] : [])].filter(item =>
-    snapshot.selectedKinds.includes(item.kind),
+    snapshot.selectedKinds.includes(item.kind) &&
+    autoSetupItemNeedsAction(item, snapshot.installedIds),
   );
   const selectedBytes = selectedItems.reduce(
     (total, item) => total + (
@@ -100,8 +102,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
       >
         <Text style={styles.title}>Choose model downloads.</Text>
         <Text style={styles.secondary}>
-          Check the models you want. The total excludes models already on this
-          device.
+          Installed models add no download size.
         </Text>
 
         {snapshot.error && (
@@ -124,29 +125,39 @@ export const AutoSetupScreen: React.FC<Props> = ({
           {snapshot.plans.map(plan => (
             <Card
               key={plan.tier}
-              onPress={starting ? undefined : () => {
-                if (expandedTier === plan.tier) {
-                  setExpandedTier(null);
-                  return;
-                }
-                if (selected?.tier !== plan.tier) session.selectTier(plan.tier);
-                setExpandedTier(plan.tier);
-              }}
               style={{
                 ...styles.planCard,
                 ...(selected?.tier === plan.tier ? styles.selectedCard : {}),
               }}
               testID={`auto-setup-plan-${plan.tier}`}
             >
-              <View style={styles.planHeading}>
-                <Text style={styles.planTitle}>{plan.title}</Text>
-                <Icon
-                  name={expandedTier === plan.tier ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={colors.textMuted}
-                />
-              </View>
-              <Text style={styles.secondary}>{plan.summary}</Text>
+              <TouchableOpacity
+                style={styles.planHeader}
+                onPress={() => {
+                  if (expandedTier === plan.tier) {
+                    setExpandedTier(null);
+                    return;
+                  }
+                  if (selected?.tier !== plan.tier) session.selectTier(plan.tier);
+                  setExpandedTier(plan.tier);
+                }}
+                disabled={starting}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`${plan.title} plan`}
+                accessibilityState={{ expanded: expandedTier === plan.tier, disabled: starting }}
+                testID={`auto-setup-plan-heading-${plan.tier}`}
+              >
+                <View style={styles.planHeading}>
+                  <Text style={styles.planTitle}>{plan.title}</Text>
+                  <Icon
+                    name={expandedTier === plan.tier ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={colors.textMuted}
+                  />
+                </View>
+                <Text style={styles.secondary}>{plan.summary}</Text>
+              </TouchableOpacity>
               {expandedTier === plan.tier && (
                 <View
                   style={styles.expandedPlan}
@@ -156,6 +167,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
                     {[...plan.items, ...(plan.embedding ? [plan.embedding] : [])].map(item => {
                       const checked = snapshot.selectedKinds.includes(item.kind);
                       const installed = snapshot.installedIds.includes(autoSetupDownloadId(item));
+                      const needsAction = autoSetupItemNeedsAction(item, snapshot.installedIds);
                       const size = item.kind === 'embedding' && item.sizeBytes === 0
                         ? 'Included' : formatBytes(item.sizeBytes);
                       return (
@@ -163,26 +175,39 @@ export const AutoSetupScreen: React.FC<Props> = ({
                           key={`${plan.tier}:${item.kind}:${item.id}`}
                           style={styles.planItem}
                         >
-                          <Button
-                            title=""
-                            icon={<Icon name={checked ? 'check-square' : 'square'} size={20} color={checked ? colors.primary : colors.textSecondary} />}
-                            variant="ghost"
-                            size="small"
-                            active={checked}
-                            style={styles.choiceControl}
-                            onPress={() => session.toggleKind(item.kind)}
-                            disabled={starting}
-                            accessibilityRole="checkbox"
-                            accessibilityLabel={`Include ${item.name}, ${size}${installed ? ', already downloaded' : ''}`}
-                            accessibilityState={{ checked, disabled: starting }}
-                            testID={`auto-setup-choice-${item.kind}`}
-                          />
+                          {needsAction ? (
+                            <Button
+                              title=""
+                              icon={<Icon name={checked ? 'check-square' : 'square'} size={20} color={checked ? colors.primary : colors.textSecondary} />}
+                              variant="ghost"
+                              size="small"
+                              active={checked}
+                              style={styles.choiceControl}
+                              onPress={() => session.toggleKind(item.kind)}
+                              disabled={starting}
+                              accessibilityRole="checkbox"
+                              accessibilityLabel={`Include ${item.name}, ${size}${installed ? ', already downloaded' : ''}`}
+                              accessibilityState={{ checked, disabled: starting }}
+                              testID={`auto-setup-choice-${item.kind}`}
+                            />
+                          ) : (
+                            <View
+                              style={styles.choiceControl}
+                              accessible
+                              accessibilityLabel={`${item.name}, included`}
+                              testID={`auto-setup-included-${item.kind}`}
+                            >
+                              <Icon name="package" size={20} color={colors.textMuted} />
+                            </View>
+                          )}
                           <Text style={styles.planItemName} numberOfLines={1}>
                             {item.name}
                           </Text>
                           <Text style={styles.itemKind}>{labelForItem(item)}</Text>
                           <Text style={styles.itemSize}>
-                            {size}{installed ? '' : outcomeLabel(snapshot.outcomes[autoSetupDownloadId(item)])}
+                            {needsAction
+                              ? `${size}${installed ? '' : outcomeLabel(snapshot.outcomes[autoSetupDownloadId(item)])}`
+                              : item.sizeBytes === 0 ? 'Included' : `${size} · Included`}
                           </Text>
                         </View>
                       );
@@ -328,6 +353,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: SPACING.sm,
   },
   selectedCard: { borderColor: colors.primary },
+  planHeader: { gap: SPACING.xs },
   planHeading: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -362,17 +388,18 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...shadows.small,
   },
   textAction: {
-    alignSelf: 'flex-start' as const,
-    justifyContent: 'flex-start' as const,
-    marginLeft: SPACING.md,
+    alignSelf: 'stretch' as const,
+    justifyContent: 'center' as const,
     paddingHorizontal: 0,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   choiceControl: {
     width: 44,
     height: 44,
     paddingHorizontal: 0,
     paddingVertical: 0,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   planItemName: {
     ...TYPOGRAPHY.body,
