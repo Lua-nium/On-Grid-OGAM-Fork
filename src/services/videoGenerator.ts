@@ -53,6 +53,7 @@ export const videoGenerator = {
     outputPath: string,
     onUpdate: (update: VideoGenerationUpdateContract) => void,
     onInterrupted?: (reason: string) => void,
+    diagnosticBackend?: 'auto' | 'gpu' | 'cpu',
   ): Promise<string> {
     if (!native)
       throw new Error('This build does not include the video engine.');
@@ -109,6 +110,7 @@ export const videoGenerator = {
           ...request,
           ...pack,
           outputPath,
+          ...(__DEV__ && diagnosticBackend ? { diagnosticBackend } : {}),
           flowShift: videoArchitecture(pack.weight)?.startsWith('wan') ? 3 : 0,
         })
       ).path;

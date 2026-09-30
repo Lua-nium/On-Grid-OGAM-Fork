@@ -1,5 +1,6 @@
 package ai.offgridmobile.video
 
+import ai.offgridmobile.BuildConfig
 import android.content.Intent
 import android.view.Window
 import android.view.WindowManager
@@ -53,7 +54,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
     override fun onHostPause() { releaseScreenFlag() }
     override fun onHostDestroy() { releaseScreenFlag() }
     override fun getName() = "VideoGenerationModule"
-    private external fun nativeGenerate(weight: String, vae: String, encoder: String, prompt: String, negative: String, width: Int, height: Int, frames: Int, fps: Int, steps: Int, guidance: Double, seed: Double, llm: String, embeddings: String, audioVae: String, flowShift: Double)
+    private external fun nativeGenerate(weight: String, vae: String, encoder: String, prompt: String, negative: String, width: Int, height: Int, frames: Int, fps: Int, steps: Int, guidance: Double, seed: Double, llm: String, embeddings: String, audioVae: String, flowShift: Double, diagnosticBackend: String)
     private external fun nativeCancel()
     private external fun nativePrepare()
     private external fun nativeSetRuntimeDirectory(path: String)
@@ -151,7 +152,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
                         if (input.hasKey("llm")) input.getString("llm") ?: "" else "",
                         if (input.hasKey("embeddings")) input.getString("embeddings") ?: "" else "",
                         if (input.hasKey("audioVae")) input.getString("audioVae") ?: "" else "",
-                        input.getDouble("flowShift"))
+                        input.getDouble("flowShift"), if (BuildConfig.DEBUG && input.hasKey("diagnosticBackend")) input.getString("diagnosticBackend") ?: "auto" else "auto")
                     writer.finish { cancelled.get() }
                 }
                 check(destination.length() > 0) { "Video encoder produced no file." }

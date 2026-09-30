@@ -1,3 +1,4 @@
+import { Alert, DevSettings, Platform } from 'react-native';
 import { videoGenerationMeta } from '../utils/modelHelpers';
 import { resolveDocumentPath } from '../utils/resolveDocumentPath';
 import logger from '../utils/logger';
@@ -14,6 +15,9 @@ import RNFS from 'react-native-fs';
 import { generateId as uuid } from '../utils/generateId';
 import {
   resolveVideoRequest,
+  videoArchitecture,
+  type ModelEntry,
+  type ResolvedVideoRequest,
   type VideoGenerationJobContract,
   type VideoGenerationRequestContract,
 } from '@offgrid/models';
@@ -269,6 +273,136 @@ class VideoGenerationService {
     });
     return this.completion;
   }
+  private async reserveVideo(
+    model: ModelEntry | undefined,
+    request: ResolvedVideoRequest,
+    modelId: string,
+    options?: { override?: boolean; nativeRecovery?: boolean },
+  ): Promise<symbol> {
+    return modelResidencyManager.runExclusive('video-generation', async () => {
+      const sizeMB =
+        (model?.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0) ??
+          0) /
+          1048576 +
+        (request.width * request.height * request.frames * 12) / 1048576 +
+        1024;
+      const spec = {
+        key: 'video',
+        type: 'video' as const,
+        modelId,
+        sizeMB,
+        dirtyMemory: true,
+        canEvict: () => false,
+      };
+      // A recovered native worker already owns its memory.
+      if (!options?.nativeRecovery) {
+        const fit = await modelResidencyManager.makeRoomFor(spec, options);
+        if (!fit.fits)
+          throw new OverridableMemoryError(
+            'Not enough available memory for this video model and clip size.',
+          );
+      }
+      if (this.cancelled) throw new Error('Video generation stopped.');
+      return modelResidencyManager.register(spec, () =>
+        this.cancelGeneration(),
+      );
+    });
+  }
+  async diagnose(backend: 'auto' | 'gpu' | 'cpu'): Promise<string> {
+    if (!__DEV__ || Platform.OS !== 'android')
+      throw new Error('Video diagnostics require an Android debug build.');
+    if (this.completion || generationSession.getConversationId())
+      throw new Error('Wait for the current generation to finish.');
+    const app = useAppStore.getState();
+    const model = app.downloadedVideoModels.find(
+      m => m.id === app.activeVideoModelId,
+    );
+    const primary = model?.files.find(file => file.role === 'primary')?.name;
+    if (!model || !primary || videoArchitecture(primary) !== 'wan21')
+      throw new Error('Select an installed Wan 2.1 video model first.');
+    // Public validation remains unchanged. Only this explicit developer action uses one frame.
+    const request = {
+      ...resolveVideoRequest({
+        model: primary,
+        prompt:
+          'A red ball rolls slowly across a wooden table. Natural daylight, fixed camera.',
+        width: 832,
+        height: 480,
+        frames: 9,
+        fps: 8,
+        steps: 4,
+        guidance: 6,
+        seed: 597089194,
+      }),
+      frames: 1,
+      steps: 2,
+    };
+    const output = `${
+      RNFS.DocumentDirectoryPath
+    }/generated-videos/diagnostic-${backend}-${Date.now()}.mp4`;
+    this.cancelled = false;
+    this.abort = new AbortController();
+    this.update({
+      ...EMPTY,
+      phase: 'running',
+      stage: 'preparing',
+      startedAt: Date.now(),
+    });
+    this.completion = (async () => {
+      let registration: symbol | undefined;
+      try {
+        const pack = await resolveVideoPack(model);
+        registration = await this.reserveVideo(model, request, model.id, {
+          override: true,
+        });
+        await RNFS.mkdir(`${RNFS.DocumentDirectoryPath}/generated-videos`);
+        logger.log('[VideoDiagnostic] start', { ...request, backend, output });
+        await videoGenerator.generate(
+          request,
+          pack,
+          output,
+          update => this.update(update),
+          undefined,
+          backend,
+        );
+        if (this.cancelled) throw new Error('Video generation stopped.');
+        const metadata = {
+          ...request,
+          requestedBackend: backend,
+          output,
+          size: (await RNFS.stat(output)).size,
+          durationMs: Date.now() - (this.state.startedAt ?? Date.now()),
+        };
+        await RNFS.writeFile(
+          `${output}.json`,
+          JSON.stringify(metadata, null, 2),
+          'utf8',
+        );
+        logger.log('[VideoDiagnostic] complete', metadata);
+        this.update({
+          phase: 'succeeded',
+          outputPath: output,
+          finishedAt: Date.now(),
+        });
+      } catch (error) {
+        this.update({
+          phase: this.cancelled ? 'cancelled' : 'failed',
+          error: String(error),
+          finishedAt: Date.now(),
+        });
+        throw error;
+      } finally {
+        if (registration)
+          modelResidencyManager.unregister('video', registration);
+        await RNFS.unlink(`${output}.preview.png`).catch(() => {});
+      }
+      return undefined;
+    })().finally(() => {
+      this.completion = null;
+    });
+    await this.completion;
+    return output;
+  }
   private async run(
     input: VideoInput,
     resumed?: VideoJournal,
@@ -395,40 +529,7 @@ class VideoGenerationService {
         provenance = remote.provenance;
       } else {
         const pack = options?.nativeRecovery ? null : await resolveVideoPack(model!);
-        await modelResidencyManager.runExclusive(
-          'video-generation',
-          async () => {
-            const sizeMB =
-              (model?.files.reduce(
-                (sum, file) => sum + (file.sizeBytes ?? 0),
-                0,
-              ) ?? 0) /
-                1048576 +
-              (request.width * request.height * request.frames * 12) / 1048576 +
-              1024;
-            const spec = {
-              key: 'video',
-              type: 'video' as const,
-              modelId,
-              sizeMB,
-              dirtyMemory: true,
-              canEvict: () => false,
-            };
-            // The surviving native worker already owns this memory. Do not evict
-            // or load models while reattaching a replacement React bridge.
-            if (!options?.nativeRecovery) {
-              const fit = await modelResidencyManager.makeRoomFor(spec, options);
-              if (!fit.fits)
-                throw new OverridableMemoryError(
-                  'Not enough available memory for this video model and clip size.',
-                );
-            }
-            if (this.cancelled) throw new Error('Video generation stopped.');
-            registration = modelResidencyManager.register(spec, () =>
-              this.cancelGeneration(),
-            );
-          },
-        );
+        registration = await this.reserveVideo(model, request, modelId, options);
         if (this.cancelled) throw new Error('Video generation stopped.');
         path = options?.nativeRecovery
           ? await videoGenerator.recover(request, output, update => this.update(update))
@@ -502,3 +603,20 @@ class VideoGenerationService {
   }
 }
 export const videoGenerationService = new VideoGenerationService();
+
+if (__DEV__ && Platform.OS === 'android') {
+  for (const backend of ['auto', 'gpu', 'cpu'] as const) {
+    DevSettings.addMenuItem(
+      `Video diagnostic: ${backend} · 1 frame, 2 steps`,
+      () => {
+        void videoGenerationService.diagnose(backend).then(
+          path => Alert.alert('Video diagnostic saved', path),
+          error => Alert.alert('Video diagnostic stopped', String(error)),
+        );
+      },
+    );
+  }
+  DevSettings.addMenuItem('Stop video diagnostic', () => {
+    void videoGenerationService.cancelGeneration();
+  });
+}

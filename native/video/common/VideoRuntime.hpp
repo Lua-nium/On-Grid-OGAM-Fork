@@ -21,6 +21,7 @@ struct VideoRequest {
   std::string llm, embeddings, audioVae;
   float flowShift = 0;
   bool cpuOnly = false;
+  bool skipNpu = false;
   int threads = 4;
   std::string imageFamily, imageSampler, imageScheduler;
 };
@@ -55,7 +56,7 @@ class VideoRuntime {
       for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
         auto device = ggml_backend_dev_get(i);
         const char *name = ggml_backend_dev_name(device);
-        if (request.cpuOnly || std::string(name).rfind("HTP", 0) != 0) continue;
+        if (request.cpuOnly || request.skipNpu || std::string(name).rfind("HTP", 0) != 0) continue;
         try {
           auto probe = ggml_backend_dev_init(device, nullptr);
           if (!probe) continue;
