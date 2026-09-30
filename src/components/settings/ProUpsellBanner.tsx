@@ -10,16 +10,10 @@ import type { ThemeColors, ThemeShadows } from '../../theme';
 import {
   SPACING,
   TYPOGRAPHY,
-  OFF_GRID_DESKTOP_BENEFIT,
   OFF_GRID_DESKTOP_URL,
 } from '../../constants';
 import { withUtm } from '../../utils/utm';
 import { getPricingCopy } from '../../utils/proPricing';
-
-const FEATURE_ROWS = [
-  [{ icon: 'layers', label: 'AMBIENT' }, { icon: 'sunrise', label: 'PROACTIVE' }],
-  [{ icon: 'shield', label: 'PRIVATE' }, { icon: 'refresh-cw', label: 'LIVE SYNC' }],
-];
 
 interface Props {
   /** Re-trigger the entrance animation when the screen regains focus. */
@@ -55,57 +49,45 @@ export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro, onDesignPa
           <View style={styles.headerText}>
             <Text style={styles.title}>Off Grid AI Pro</Text>
             <Text style={styles.desc}>
-              Your private AI stays current across your devices with live sync.
+              Private memory and live sync across your devices.
             </Text>
           </View>
           <TouchableOpacity
             onPress={() => dismiss(true)}
             style={styles.close}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss Pro offer"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Icon name="x" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.grid}>
-          {FEATURE_ROWS.map((row, i) => (
-            <View key={i} style={styles.row}>
-              {row.map((f) => (
-                <View key={f.label} style={styles.item}>
-                  <View style={styles.iconWrap}>
-                    <Icon name={f.icon} size={16} color={colors.primary} />
-                  </View>
-                  <Text style={styles.label}>{f.label}</Text>
-                </View>
-              ))}
-            </View>
-          ))}
-        </View>
-
-        <Button title={pricing.cta} variant="primary" onPress={onGetPro} style={styles.cta} />
+        <Button title={pricing.cta} variant="primary" size="small" onPress={onGetPro} style={styles.cta} />
 
         <View style={styles.partnerOffer}>
-          <Text style={styles.partnerTitle}>Run a small business?</Text>
           <Text style={styles.desc}>
-            You could get Off Grid AI Pro free for life as a design partner.
-            For teams with fewer than 50 people, if your idea fits.
+            Fewer than 50 people? Get free lifetime Pro if your business idea fits.
           </Text>
           <Button
             title="See the partner offer"
-            variant="ghost"
+            variant="outline"
+            size="small"
+            icon={<Icon name="arrow-right" size={16} color={colors.textSecondary} />}
             onPress={onDesignPartners}
           />
         </View>
 
-        <TouchableOpacity
+        <Button
+          title="Get Off Grid AI Desktop"
+          variant="outline"
+          size="small"
           style={styles.desktopLink}
           onPress={() => Linking.openURL(withUtm(OFF_GRID_DESKTOP_URL, 'pro-upsell')).catch(() => {})}
           accessibilityRole="link"
-          accessibilityLabel="Get Off Grid AI Desktop"
-        >
-          <Icon name="monitor" size={14} color={colors.textMuted} />
-          <Text style={styles.desktopLinkText}>{OFF_GRID_DESKTOP_BENEFIT}</Text>
-        </TouchableOpacity>
+          accessibilityLabel="Get Off Grid AI Desktop on the website"
+          icon={<Icon name="external-link" size={16} color={colors.textSecondary} />}
+        />
       </View>
     </AnimatedEntry>
   );
@@ -113,7 +95,7 @@ export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro, onDesignPa
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   card: {
-    borderRadius: 12,
+    borderRadius: 8,
     marginBottom: SPACING.lg,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -128,44 +110,20 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingBottom: SPACING.md,
   },
   headerText: { flex: 1, marginRight: SPACING.md },
-  title: { ...TYPOGRAPHY.h1, color: colors.primary, marginBottom: SPACING.xs },
+  title: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: SPACING.xs },
   desc: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, lineHeight: 18 },
-  close: { padding: SPACING.xs },
-  grid: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, gap: SPACING.sm },
-  row: { flexDirection: 'row' as const, gap: SPACING.sm },
-  item: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceLight,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  label: { ...TYPOGRAPHY.label, color: colors.text, letterSpacing: 0.5 },
-  cta: { margin: SPACING.lg, marginTop: SPACING.sm },
+  close: { padding: SPACING.xs, minWidth: 44, minHeight: 44, alignItems: 'center' as const },
+  cta: { marginHorizontal: SPACING.lg, marginBottom: SPACING.md },
   partnerOffer: {
     marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
-    paddingTop: SPACING.lg,
+    marginBottom: SPACING.sm,
+    paddingTop: SPACING.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     gap: SPACING.sm,
   },
-  partnerTitle: { ...TYPOGRAPHY.h3, color: colors.text },
   desktopLink: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: SPACING.xs,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.lg,
-    marginTop: -SPACING.xs,
-  },
-  desktopLinkText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textMuted,
-    flexShrink: 1,
-    textAlign: 'center' as const,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
   },
 });

@@ -196,19 +196,17 @@ export const ProDetailScreen: React.FC = () => {
             <Card style={styles.partnerCard}>
               <Text style={styles.sectionLabel}>SMALL BUSINESS DESIGN PARTNERS</Text>
               <Text style={styles.partnerTitle} accessibilityRole="header">
-                Your business idea could get you Pro free for life.
+                Free lifetime Pro for design partners
               </Text>
               <Text style={styles.partnerDescription}>
-                Have fewer than 50 people on your team? Help shape a solution for
-                your daily work.
-              </Text>
-              <Text style={styles.partnerDescription}>
-                If your idea fits Off Grid AI, you get free lifetime Pro. Even if
-                we do not build the full solution together.
+                Have fewer than 50 people? If your business idea fits, Pro is free
+                for life, even if we do not build the full solution together.
               </Text>
               <Button
                 title="See the partner offer"
-                variant="secondary"
+                variant="outline"
+                size="small"
+                icon={<Icon name="arrow-right" size={16} color={colors.textSecondary} />}
                 onPress={() => navigation.navigate('DesignPartners')}
               />
             </Card>
@@ -261,7 +259,7 @@ export const ProDetailScreen: React.FC = () => {
             <Text style={styles.desktopTitle}>Get Off Grid AI Desktop</Text>
             <Text style={styles.desktopDesc}>{OFF_GRID_DESKTOP_BENEFIT}</Text>
           </View>
-          <Icon name="external-link" size={16} color={colors.textMuted} />
+          <Icon name="external-link" size={16} color={colors.primary} />
         </TouchableOpacity>
       </ScrollView>
 
@@ -402,7 +400,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
 
   // Pillars
   partnerCard: { marginHorizontal: SPACING.xl, marginBottom: SPACING.xl },
-  partnerTitle: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: SPACING.md },
+  partnerTitle: { ...TYPOGRAPHY.h3, color: colors.text, marginBottom: SPACING.sm },
   partnerDescription: {
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
@@ -463,7 +461,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     justifyContent: 'center' as const,
   },
   desktopText: { flex: 1, gap: 3 as number },
-  desktopTitle: { ...TYPOGRAPHY.body, color: colors.text },
+  desktopTitle: { ...TYPOGRAPHY.body, color: colors.primary, textDecorationLine: 'underline' as const },
   desktopDesc: {
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
