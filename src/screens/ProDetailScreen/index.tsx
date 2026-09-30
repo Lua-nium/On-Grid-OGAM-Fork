@@ -199,7 +199,7 @@ export const ProDetailScreen: React.FC = () => {
                 Your business idea could get you Pro free for life.
               </Text>
               <Text style={styles.partnerDescription}>
-                Have fewer than 25 people on your team? Help shape a solution for
+                Have fewer than 50 people on your team? Help shape a solution for
                 your daily work.
               </Text>
               <Text style={styles.partnerDescription}>

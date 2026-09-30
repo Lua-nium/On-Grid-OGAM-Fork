@@ -61,7 +61,10 @@ export const DesignPartnersScreen: React.FC = () => {
       />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title} accessibilityRole="header">Build around your work. Pay $0.</Text>
-        <Text style={styles.body}>For companies with fewer than 25 people.</Text>
+        <Text style={styles.body}>
+          For small businesses with fewer than 50 people. Ideally, we work
+          directly with an owner or someone who can choose and test a solution.
+        </Text>
         {OFFER.map(item => (
           <View key={item.title} style={styles.section}>
             <Text style={styles.heading} accessibilityRole="header">{item.title}</Text>
@@ -71,9 +74,9 @@ export const DesignPartnersScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.heading} accessibilityRole="header">Is this a fit for my business?</Text>
           <Text style={styles.body}>
-            We are looking for problems you would normally budget $99-$999 per
-            month to solve. This describes the type of work. Your cost as a
-            design partner is $0.
+            We are looking for recurring problems that would normally justify
+            spending $99-$999 per month to solve. As a design partner, your cost
+            is $0.
           </Text>
         </View>
         <Text style={styles.body}>

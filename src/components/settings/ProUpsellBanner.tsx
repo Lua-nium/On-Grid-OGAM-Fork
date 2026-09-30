@@ -88,7 +88,7 @@ export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro, onDesignPa
           <Text style={styles.partnerTitle}>Run a small business?</Text>
           <Text style={styles.desc}>
             You could get Off Grid AI Pro free for life as a design partner.
-            For teams with fewer than 25 people, if your idea fits.
+            For teams with fewer than 50 people, if your idea fits.
           </Text>
           <Button
             title="See the partner offer"
