@@ -95,8 +95,8 @@ export const AutoSetupScreen: React.FC<Props> = ({
         <Text style={styles.eyebrow}>AUTO SETUP</Text>
         <Text style={styles.title}>Your private AI, ready in one step.</Text>
         <Text style={styles.secondary}>
-          Choose how much capability you want. Every option is safe for this
-          device.
+          Choose the models you want to download. You can change your choice
+          later.
         </Text>
 
         {snapshot.error && (

@@ -1,7 +1,7 @@
 import { CATALOG, videoPackError } from '@offgrid/models';
 import { videoGenerator } from './videoGenerator';
 import { recommendedModelsForDevice, ramFitScore } from '../utils/recommendedModels';
-import { fileExceedsBudget } from './memoryBudget';
+import { fileExceedsBudget, modelBudgetFraction } from './memoryBudget';
 import { fetchModelFiles } from './modelCatalogFiles';
 import { hardwareService } from './hardware';
 import { WHISPER_MODELS } from './whisperModels';
@@ -101,7 +101,6 @@ export async function loadAutoSetupCompatibleCatalog(
   );
   const videoAvailable = boundaries.videoAvailable?.() ?? false;
   const video = videoAvailable ? completeVideoPacks.flatMap(model => {
-    if (model.minRamGb! > ramGB) return [];
     const sizeBytes = model.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
     if (fileExceedsBudget(sizeBytes, ramGB)) return [];
     return [{
@@ -109,12 +108,17 @@ export async function loadAutoSetupCompatibleCatalog(
       fitScore: ramFitScore(model.minRamGb!, ramGB), payload: model,
     }];
   }) : [];
-  const minimumVideoRamGB = Math.min(...completeVideoPacks.map(model => model.minRamGb!));
+  const smallestDownload = [...completeVideoPacks]
+    .sort((a, b) =>
+      a.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0) -
+      b.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0),
+    )[0];
+  const smallestDownloadGB = (smallestDownload?.files.reduce(
+    (sum, file) => sum + (file.sizeBytes ?? 0), 0,
+  ) ?? 0) / (1024 ** 3);
   const videoExclusionReason = video.length ? undefined
-    : !videoAvailable ? 'This app build does not include the local video engine.'
-    : !completeVideoPacks.length ? 'No complete video model pack is available in the catalog.'
-    : ramGB < minimumVideoRamGB
-      ? `Auto Setup recommends at least ${minimumVideoRamGB} GB RAM for video. This device reports ${ramGB.toFixed(1)} GB. Select Configure it yourself to review video models.`
-      : 'Video packs exceed this device\'s Auto Setup memory budget. Select Configure it yourself to review video models.';
+    : !videoAvailable ? 'This app build cannot run local video.'
+    : !smallestDownload ? 'Auto Setup has no complete video model to download.'
+    : `${smallestDownload.name} needs a ${smallestDownloadGB.toFixed(1)} GB download. Auto Setup's size limit for this device is ${(ramGB * modelBudgetFraction(ramGB)).toFixed(1)} GB. Select Configure it yourself to review video models.`;
   return { text, image, stt, video, videoExclusionReason };
 }
