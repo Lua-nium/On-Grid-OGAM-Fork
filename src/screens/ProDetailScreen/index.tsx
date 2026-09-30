@@ -10,7 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import { Button } from '../../components';
+import { Button, Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import {
@@ -192,6 +192,26 @@ export const ProDetailScreen: React.FC = () => {
               <Text style={styles.pricingTitle}>{pricing.title}</Text>
               <Text style={styles.pricingSubtitle}>{pricing.subtitle}</Text>
             </View>
+
+            <Card style={styles.partnerCard}>
+              <Text style={styles.sectionLabel}>SMALL BUSINESS DESIGN PARTNERS</Text>
+              <Text style={styles.partnerTitle} accessibilityRole="header">
+                Your business idea could get you Pro free for life.
+              </Text>
+              <Text style={styles.partnerDescription}>
+                Have fewer than 25 people on your team? Help shape a solution for
+                your daily work.
+              </Text>
+              <Text style={styles.partnerDescription}>
+                If your idea fits Off Grid AI, you get free lifetime Pro. Even if
+                we do not build the full solution together.
+              </Text>
+              <Button
+                title="See the partner offer"
+                variant="secondary"
+                onPress={() => navigation.navigate('DesignPartners')}
+              />
+            </Card>
 
             {/* Ambient pillars */}
             <View style={styles.pillarsSection}>
@@ -381,6 +401,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
 
   // Pillars
+  partnerCard: { marginHorizontal: SPACING.xl, marginBottom: SPACING.xl },
+  partnerTitle: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: SPACING.md },
+  partnerDescription: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: SPACING.md,
+  },
   pillarsSection: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.lg },
   sectionLabel: {
     ...TYPOGRAPHY.label,
