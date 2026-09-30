@@ -1,11 +1,12 @@
 import { CATALOG, videoPackError } from '@offgrid/models';
 import { recommendedModelsForDevice, ramFitScore } from '../utils/recommendedModels';
-import { fileExceedsBudget, modelBudgetFraction } from './memoryBudget';
+import { fileExceedsBudget } from './memoryBudget';
 import { fetchModelFiles } from './modelCatalogFiles';
 import { hardwareService } from './hardware';
 import { WHISPER_MODELS } from './whisperModels';
 import type { AutoSetupCompatibleCatalog } from './autoSetupPlan';
 import { autoSetupImageCatalogProvider } from './autoSetupImageCatalogProvider';
+import { BUNDLED_EMBEDDING_MODEL, RECOMMENDED_EMBEDDING_MODELS } from './huggingFaceModelBrowser';
 
 const MB = 1024 * 1024;
 
@@ -96,24 +97,23 @@ export async function loadAutoSetupCompatibleCatalog(
     !!model.minRamGb && !videoPackError(model.files) &&
     model.files.every(file => !!file.sizeBytes),
   );
-  const video = completeVideoPacks.flatMap(model => {
+  const video = completeVideoPacks.map(model => {
     const sizeBytes = model.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
-    if (fileExceedsBudget(sizeBytes, ramGB)) return [];
-    return [{
+    return {
       id: model.id, name: model.name, kind: 'video' as const, sizeBytes,
       fitScore: ramFitScore(model.minRamGb!, ramGB), payload: model,
-    }];
+    };
   });
-  const smallestDownload = [...completeVideoPacks]
-    .sort((a, b) =>
-      a.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0) -
-      b.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0),
-    )[0];
-  const smallestDownloadGB = (smallestDownload?.files.reduce(
-    (sum, file) => sum + (file.sizeBytes ?? 0), 0,
-  ) ?? 0) / (1024 ** 3);
   const videoExclusionReason = video.length ? undefined
-    : !smallestDownload ? 'Auto Setup has no complete video model to download.'
-    : `${smallestDownload.name} needs a ${smallestDownloadGB.toFixed(1)} GB download. Auto Setup's size limit for this device is ${(ramGB * modelBudgetFraction(ramGB)).toFixed(1)} GB. Select Configure it yourself to review video models.`;
-  return { text, image, stt, video, videoExclusionReason };
+    : 'Auto Setup has no complete video model to download.';
+  const embedding = [BUNDLED_EMBEDDING_MODEL, ...RECOMMENDED_EMBEDDING_MODELS]
+    .map((model, index) => ({
+      id: model.id,
+      name: model.name,
+      kind: 'embedding' as const,
+      sizeBytes: model.size,
+      fitScore: index === 1 ? 0 : index,
+      payload: model,
+    }));
+  return { text, image, stt, video, videoExclusionReason, embedding };
 }

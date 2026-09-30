@@ -8,7 +8,7 @@ import { LoadingDots } from '../components/LoadingDots';
 import { SLOTS, useSlot } from '../bootstrap/slotRegistry';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import type { RootStackParamList } from '../navigation/types';
-import type { AutoSetupPlan } from '../services/autoSetupPlan';
+import type { AutoSetupItem } from '../services/autoSetupPlan';
 import {
   autoSetupDownloadId,
   createAutoSetupSession,
@@ -26,10 +26,11 @@ type Props = {
   sessionFactory?: () => AutoSetupSession;
 };
 
-const labelForItem = (item: AutoSetupPlan['items'][number]) => {
+const labelForItem = (item: AutoSetupItem) => {
   if (item.kind === 'text') return 'TEXT + VISION';
   if (item.kind === 'image') return 'IMAGE';
   if (item.kind === 'video') return 'VIDEO';
+  if (item.kind === 'embedding') return 'SEARCH MODEL';
   return 'SPEECH INPUT';
 };
 
@@ -56,11 +57,13 @@ export const AutoSetupScreen: React.FC<Props> = ({
   const selected =
     snapshot.plans.find(plan => plan.tier === snapshot.selectedTier) ??
     snapshot.plans[0];
-  const selectedItems = selected?.items.filter(item =>
+  const selectedItems = [...(selected?.items ?? []), ...(selected?.embedding ? [selected.embedding] : [])].filter(item =>
     snapshot.selectedKinds.includes(item.kind),
-  ) ?? [];
+  );
   const selectedBytes = selectedItems.reduce(
-    (total, item) => total + item.sizeBytes, 0,
+    (total, item) => total + (
+      snapshot.installedIds.includes(autoSetupDownloadId(item)) ? 0 : item.sizeBytes
+    ), 0,
   );
   const selectedOutcomes =
     selectedItems.map(item => snapshot.outcomes[autoSetupDownloadId(item)]);
@@ -80,7 +83,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
         <View style={styles.center}>
           <LoadingDots color={colors.primary} />
           <Text style={styles.secondary}>
-            Finding the best models for this device...
+            Finding model choices...
           </Text>
         </View>
       </SafeAreaView>
@@ -93,10 +96,10 @@ export const AutoSetupScreen: React.FC<Props> = ({
         testID="auto-setup-screen"
       >
         <Text style={styles.eyebrow}>AUTO SETUP</Text>
-        <Text style={styles.title}>Your private AI, ready in one step.</Text>
+        <Text style={styles.title}>Choose model downloads.</Text>
         <Text style={styles.secondary}>
-          Choose the models you want to download. You can change your choice
-          later.
+          Check the models you want. The total excludes models already on this
+          device.
         </Text>
 
         {snapshot.error && (
@@ -136,7 +139,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
                 >
                   <Text style={styles.includesLabel}>CHOOSE MODELS</Text>
                   <View style={styles.planItems}>
-                    {plan.items.map(item => {
+                    {[...plan.items, ...(plan.embedding ? [plan.embedding] : [])].map(item => {
                       const checked = snapshot.selectedKinds.includes(item.kind);
                       return (
                         <View
@@ -165,10 +168,11 @@ export const AutoSetupScreen: React.FC<Props> = ({
                           />
                           <Text style={styles.planItemName}>{item.name}</Text>
                           <Text style={styles.itemSize}>
-                            {formatBytes(item.sizeBytes)}
-                            {outcomeLabel(
-                              snapshot.outcomes[autoSetupDownloadId(item)],
-                            )}
+                            {item.kind === 'embedding' && item.sizeBytes === 0
+                              ? 'Included with the app' : formatBytes(item.sizeBytes)}
+                            {snapshot.installedIds.includes(autoSetupDownloadId(item))
+                              ? ' - READY'
+                              : outcomeLabel(snapshot.outcomes[autoSetupDownloadId(item)])}
                           </Text>
                           {item.kind === 'video' && plan.items[3] && (
                             <>
@@ -179,6 +183,11 @@ export const AutoSetupScreen: React.FC<Props> = ({
                                 </Text>
                               ))}
                             </>
+                          )}
+                          {item.kind === 'embedding' && (
+                            <Text style={styles.itemSize}>
+                              Download only. To change the search model, open Models and confirm an index rebuild.
+                            </Text>
                           )}
                         </View>
                       );
@@ -225,6 +234,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
                       title={
                         snapshot.phase === 'failed'
                           ? 'Retry Downloads'
+                          : selectedBytes === 0 ? 'Use selected models'
                           : `Download ${formatBytes(selectedBytes)}`
                       }
                       onPress={() => {
@@ -233,6 +243,14 @@ export const AutoSetupScreen: React.FC<Props> = ({
                       loading={starting}
                       disabled={selectedItems.length === 0}
                       testID="auto-setup-download"
+                    />
+                  )}
+                  {starting && (
+                    <Button
+                      title="Stop Downloads"
+                      variant="outline"
+                      onPress={() => { session.cancel().catch(() => undefined); }}
+                      testID="auto-setup-cancel"
                     />
                   )}
                 </View>
@@ -244,7 +262,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
         {!selected && (
           <Card style={styles.errorCard}>
             <Text style={styles.error}>
-              No complete model set is safe for this device.
+              Auto Setup could not find the models it needs to show a plan.
             </Text>
           </Card>
         )}
