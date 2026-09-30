@@ -26,6 +26,7 @@ export type RootStackParamList = {
   DownloadManager: undefined;
   Gallery: { conversationId?: string } | undefined;
   ProDetail: undefined;
+  DesignPartners: undefined;
   About: undefined;
   Tools: undefined;
 };
