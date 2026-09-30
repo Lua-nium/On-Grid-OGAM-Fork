@@ -29,6 +29,7 @@ static BOOL OGSaveRgbPng(const sd_image_t &image, NSString *output) {
   BOOL _holdsIdleTimer;
   BOOL _previousIdleTimerDisabled;
   NSString *_videoInterruptionReason;
+  NSString *_imageNativeError;
   BGTask *_continued;
   NSString *_taskIdentifier;
   dispatch_block_t _continuedWork;
@@ -69,6 +70,35 @@ RCT_EXPORT_MODULE(VideoGenerationModule)
   NSLog(@"[VideoLifecycle] %@", detail);
   if (_listeners) [self sendEventWithName:@"VideoGenerationProgress"
     body:@{@"lifecycle":detail, @"at":@([[NSDate date] timeIntervalSince1970] * 1000)}];
+}
+- (void)beginImageDiagnostics {
+  @synchronized (self) { _imageNativeError = nil; }
+  sd_set_log_callback([](enum sd_log_level_t level, const char *text, void *data) {
+    if (!text) return;
+    std::fputs(text, stderr);
+    // Retain placement and failure evidence, without prompts or model contents.
+    if (std::strstr(text, "prompt")) return;
+    if (level < SD_LOG_WARN && !std::strstr(text, "auto-fit") &&
+        !std::strstr(text, "backend") && !std::strstr(text, "MiB") &&
+        !std::strstr(text, "sampling completed") && !std::strstr(text, "cancelling")) return;
+    VideoGenerationModule *owner = (__bridge VideoGenerationModule *)data;
+    NSString *detail = [NSString stringWithUTF8String:text];
+    if (!detail) return;
+    if (detail.length > 2048) detail = [detail substringToIndex:2048];
+    if (level == SD_LOG_ERROR) {
+      @synchronized (owner) { owner->_imageNativeError = detail; }
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (owner->_listeners) [owner sendEventWithName:@"SDImageProgress" body:@{@"diagnostic":detail}];
+    });
+  }, (__bridge void *)self);
+}
+- (NSString *)finishImageDiagnostics:(NSString *)failure {
+  sd_set_log_callback(nullptr, nullptr);
+  @synchronized (self) {
+    return failure && _imageNativeError.length
+      ? [NSString stringWithFormat:@"%@ %@", failure, _imageNativeError] : failure;
+  }
 }
 - (void)interruptVideo:(NSString *)reason {
   _videoInterruptionReason = reason;
@@ -196,6 +226,7 @@ RCT_REMAP_METHOD(loadImageModel, loadImage:(NSDictionary *)input resolver:(RCTPr
     self->_busy = YES; self->_runtime.cancelled.store(false);
     dispatch_async(self->_worker, ^{
       NSString *failure = nil;
+      [self beginImageDiagnostics];
       try {
         offgrid::VideoRequest request{};
         request.weight = [input[@"weight"] UTF8String]; request.vae = [(input[@"vae"] ?: @"") UTF8String];
@@ -206,6 +237,7 @@ RCT_REMAP_METHOD(loadImageModel, loadImage:(NSDictionary *)input resolver:(RCTPr
         request.threads = [input[@"threads"] intValue]; request.cpuOnly = [input[@"cpuOnly"] boolValue];
         self->_runtime.loadImage(request, [input[@"modelPath"] UTF8String]);
       } catch (const std::exception &error) { failure = @(error.what()); }
+      failure = [self finishImageDiagnostics:failure];
       dispatch_async(dispatch_get_main_queue(), ^{
         self->_busy = NO;
         if (failure) reject(@"IMAGE_LOAD_FAILED", failure, nil); else resolve(@YES);
@@ -236,6 +268,7 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
       @autoreleasepool {
         NSString *output = input[@"outputPath"];
         NSString *failure = nil;
+        [self beginImageDiagnostics];
         try {
           offgrid::VideoRequest request{};
           request.prompt = [input[@"prompt"] UTF8String]; request.negative = [input[@"negativePrompt"] UTF8String];
@@ -265,6 +298,7 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
         } catch (const std::exception &error) {
           failure = @(error.what()); [[NSFileManager defaultManager] removeItemAtPath:output error:nil];
         }
+        failure = [self finishImageDiagnostics:failure];
         dispatch_async(dispatch_get_main_queue(), ^{
           self->_busy = NO;
           [self restoreScreenIdleTimer];

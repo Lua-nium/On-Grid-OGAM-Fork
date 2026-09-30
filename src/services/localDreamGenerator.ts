@@ -86,7 +86,12 @@ class LocalDreamGeneratorService {
       if (!integrity.complete) throw new Error(`The image model pack is incomplete: ${integrity.missing.join(', ')}`);
       const pack = await resolveSDImagePack(opts.modelId ?? modelPath.split('/').pop() ?? '', modelPath);
       if (await DiffusionModule?.isModelLoaded()) await DiffusionModule.unloadModel();
-      await SDModule.loadImageModel({ modelPath, ...pack, threads: threads ?? 4, cpuOnly: opts.cpuOnly ?? false });
+      const diagnostics = new NativeEventEmitter(SDModule).addListener('SDImageProgress', (event: { diagnostic?: string }) => {
+        if (event.diagnostic) logger.log(`[SD-IMAGE-NATIVE] ${event.diagnostic}`);
+      });
+      try {
+        await SDModule.loadImageModel({ modelPath, ...pack, threads: threads ?? 4, cpuOnly: opts.cpuOnly ?? false });
+      } finally { diagnostics.remove(); }
       this.usingSD = true; this.eventEmitter = null; this.loadedThreads = threads ?? 4;
       return true;
     }
@@ -138,7 +143,11 @@ class LocalDreamGeneratorService {
   private subscribeToProgress(onProgress?: ProgressCallback, onPreview?: PreviewCallback): any {
     return this.getEmitter().addListener(
       this.usingSD ? 'SDImageProgress' : 'LocalDreamProgress',
-      (event: { step: number; totalSteps: number; progress: number; previewPath?: string }) => {
+      (event: { step: number; totalSteps: number; progress: number; previewPath?: string; diagnostic?: string }) => {
+        if (event.diagnostic) {
+          logger.log(`[SD-IMAGE-NATIVE] ${event.diagnostic}`);
+          return;
+        }
         if (
           !Number.isInteger(event.step) ||
           event.step < 1 ||
