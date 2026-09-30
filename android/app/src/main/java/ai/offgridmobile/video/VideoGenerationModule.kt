@@ -28,6 +28,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
     private var addedScreenFlag = false
     private var encoder: VideoEncoder? = null
     private var previewFile: File? = null
+    private var videoSteps = 0
     init { context.addLifecycleEventListener(this) }
     private fun releaseScreenFlag() {
         if (addedScreenFlag) awakeWindow?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -82,6 +83,8 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
     // Called synchronously by JNI while its worker owns the runtime.
     fun conditioning(backend: String) { emit("conditioning", 0, 0, backend) }
     fun progress(step: Int, total: Int) {
+        // Loading and VAE counters share this callback; preserve the sampling snapshot.
+        if (total != videoSteps || step !in 0..videoSteps) return
         emit("generating", step, total)
     }
     fun decoding(completed: Int, total: Int) { emit("decoding", completed, total) }
@@ -136,7 +139,8 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
                 ContextCompat.startForegroundService(context, Intent(context, VideoGenerationService::class.java))
                 VideoGenerationService.admission.get(5, TimeUnit.SECONDS)
                 check(!cancelled.get()) { "Video generation stopped." }
-                emit("preparing", 0, input.getInt("steps"))
+                videoSteps = input.getInt("steps")
+                emit("preparing", 0, videoSteps)
                 VideoEncoder(destination.path, input.getInt("width"), input.getInt("height"), input.getInt("fps")).use { writer ->
                     encoder = writer
                     nativeGenerate(checkNotNull(input.getString("weight")), checkNotNull(input.getString("vae")), if (input.hasKey("encoder")) input.getString("encoder") ?: "" else "",

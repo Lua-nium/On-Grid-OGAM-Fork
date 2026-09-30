@@ -206,7 +206,7 @@ class VideoGenerationService {
       throw new Error(
         'Wait for the current generation to finish before retrying.',
       );
-    this.completion = this.run(this.journal.input, this.journal, options).finally(() => {
+    this.completion = this.run(this.journal.input, { ...this.journal, startedAt: Date.now() }, options).finally(() => {
       this.completion = null;
     });
     return this.completion;
