@@ -149,6 +149,7 @@ export const SettingsScreen: React.FC = () => {
         <ProUpsellBanner
           trigger={focusTrigger}
           onGetPro={() => navigation.navigate('ProDetail')}
+          onDesignPartners={() => navigation.navigate('DesignPartners')}
         />
 
         <SettingsAppearanceRow

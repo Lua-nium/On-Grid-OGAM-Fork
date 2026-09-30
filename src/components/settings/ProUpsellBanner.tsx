@@ -25,6 +25,7 @@ interface Props {
   /** Re-trigger the entrance animation when the screen regains focus. */
   trigger: number;
   onGetPro: () => void;
+  onDesignPartners: () => void;
 }
 
 /**
@@ -32,7 +33,7 @@ interface Props {
  * (hidden once Pro is active or the banner is dismissed). Flat, token-only, and
  * weights <= 400 per docs/design.
  */
-export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro }) => {
+export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro, onDesignPartners }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   // A saved credential may need device reactivation, but it is never an upsell.
@@ -83,6 +84,19 @@ export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro }) => {
 
         <Button title={pricing.cta} variant="primary" onPress={onGetPro} style={styles.cta} />
 
+        <View style={styles.partnerOffer}>
+          <Text style={styles.partnerTitle}>Run a small business?</Text>
+          <Text style={styles.desc}>
+            You could get Off Grid AI Pro free for life as a design partner.
+            For teams with fewer than 25 people, if your idea fits.
+          </Text>
+          <Button
+            title="See the partner offer"
+            variant="ghost"
+            onPress={onDesignPartners}
+          />
+        </View>
+
         <TouchableOpacity
           style={styles.desktopLink}
           onPress={() => Linking.openURL(withUtm(OFF_GRID_DESKTOP_URL, 'pro-upsell')).catch(() => {})}
@@ -130,6 +144,15 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   label: { ...TYPOGRAPHY.label, color: colors.text, letterSpacing: 0.5 },
   cta: { margin: SPACING.lg, marginTop: SPACING.sm },
+  partnerOffer: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    paddingTop: SPACING.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: SPACING.sm,
+  },
+  partnerTitle: { ...TYPOGRAPHY.h3, color: colors.text },
   desktopLink: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
