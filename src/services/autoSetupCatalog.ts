@@ -1,5 +1,4 @@
 import { CATALOG, videoPackError } from '@offgrid/models';
-import { videoGenerator } from './videoGenerator';
 import { recommendedModelsForDevice, ramFitScore } from '../utils/recommendedModels';
 import { fileExceedsBudget, modelBudgetFraction } from './memoryBudget';
 import { fetchModelFiles } from './modelCatalogFiles';
@@ -14,7 +13,6 @@ type CompatibleTextModel = ReturnType<typeof recommendedModelsForDevice>[number]
 
 export interface AutoSetupCatalogBoundaries {
   totalMemoryGB: () => number | Promise<number>;
-  videoAvailable?: () => boolean;
   fetchTextFiles: typeof fetchModelFiles;
   imageRecommendation: typeof hardwareService.getImageModelRecommendation;
   imageModels: typeof autoSetupImageCatalogProvider.load;
@@ -25,7 +23,6 @@ const productionCatalogBoundaries: AutoSetupCatalogBoundaries = {
     await hardwareService.getDeviceInfo();
     return hardwareService.getTotalMemoryGB();
   },
-  videoAvailable: () => videoGenerator.available(),
   fetchTextFiles: fetchModelFiles,
   imageRecommendation: () => hardwareService.getImageModelRecommendation(),
   imageModels: () => autoSetupImageCatalogProvider.load(),
@@ -99,15 +96,14 @@ export async function loadAutoSetupCompatibleCatalog(
     !!model.minRamGb && !videoPackError(model.files) &&
     model.files.every(file => !!file.sizeBytes),
   );
-  const videoAvailable = boundaries.videoAvailable?.() ?? false;
-  const video = videoAvailable ? completeVideoPacks.flatMap(model => {
+  const video = completeVideoPacks.flatMap(model => {
     const sizeBytes = model.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
     if (fileExceedsBudget(sizeBytes, ramGB)) return [];
     return [{
       id: model.id, name: model.name, kind: 'video' as const, sizeBytes,
       fitScore: ramFitScore(model.minRamGb!, ramGB), payload: model,
     }];
-  }) : [];
+  });
   const smallestDownload = [...completeVideoPacks]
     .sort((a, b) =>
       a.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0) -
@@ -117,7 +113,6 @@ export async function loadAutoSetupCompatibleCatalog(
     (sum, file) => sum + (file.sizeBytes ?? 0), 0,
   ) ?? 0) / (1024 ** 3);
   const videoExclusionReason = video.length ? undefined
-    : !videoAvailable ? 'This app build cannot run local video.'
     : !smallestDownload ? 'Auto Setup has no complete video model to download.'
     : `${smallestDownload.name} needs a ${smallestDownloadGB.toFixed(1)} GB download. Auto Setup's size limit for this device is ${(ramGB * modelBudgetFraction(ramGB)).toFixed(1)} GB. Select Configure it yourself to review video models.`;
   return { text, image, stt, video, videoExclusionReason };
