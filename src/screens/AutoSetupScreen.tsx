@@ -69,6 +69,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
   );
   const selectedOutcomes =
     selectedItems.map(item => snapshot.outcomes[autoSetupDownloadId(item)]);
+  const showProgress = selectedOutcomes.some(outcome => outcome !== undefined);
   const progress =
     selectedOutcomes.length === 0
       ? 0
@@ -97,7 +98,6 @@ export const AutoSetupScreen: React.FC<Props> = ({
         contentContainerStyle={styles.content}
         testID="auto-setup-screen"
       >
-        <Text style={styles.eyebrow}>AUTO SETUP</Text>
         <Text style={styles.title}>Choose model downloads.</Text>
         <Text style={styles.secondary}>
           Check the models you want. The total excludes models already on this
@@ -138,14 +138,20 @@ export const AutoSetupScreen: React.FC<Props> = ({
               }}
               testID={`auto-setup-plan-${plan.tier}`}
             >
-              <Text style={styles.planTitle}>{plan.title}</Text>
+              <View style={styles.planHeading}>
+                <Text style={styles.planTitle}>{plan.title}</Text>
+                <Icon
+                  name={expandedTier === plan.tier ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={colors.textMuted}
+                />
+              </View>
               <Text style={styles.secondary}>{plan.summary}</Text>
               {expandedTier === plan.tier && (
                 <View
                   style={styles.expandedPlan}
                   testID="auto-setup-selected-plan"
                 >
-                  <Text style={styles.includesLabel}>CHOOSE MODELS</Text>
                   <View style={styles.planItems}>
                     {[...plan.items, ...(plan.embedding ? [plan.embedding] : [])].map(item => {
                       const checked = snapshot.selectedKinds.includes(item.kind);
@@ -153,7 +159,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
                       const size = item.kind === 'embedding' && item.sizeBytes === 0
                         ? 'Included' : formatBytes(item.sizeBytes);
                       return (
-                        <Card
+                        <View
                           key={`${plan.tier}:${item.kind}:${item.id}`}
                           style={styles.planItem}
                         >
@@ -171,14 +177,14 @@ export const AutoSetupScreen: React.FC<Props> = ({
                             accessibilityState={{ checked, disabled: starting }}
                             testID={`auto-setup-choice-${item.kind}`}
                           />
-                          <Text style={styles.itemKind}>{labelForItem(item)}</Text>
                           <Text style={styles.planItemName} numberOfLines={1}>
                             {item.name}
                           </Text>
+                          <Text style={styles.itemKind}>{labelForItem(item)}</Text>
                           <Text style={styles.itemSize}>
                             {size}{installed ? '' : outcomeLabel(snapshot.outcomes[autoSetupDownloadId(item)])}
                           </Text>
-                        </Card>
+                        </View>
                       );
                     })}
                     {!plan.items[3] && (
@@ -189,22 +195,16 @@ export const AutoSetupScreen: React.FC<Props> = ({
                         </Text>
                       </View>
                     )}
-                    {VoiceIndicator ? (
-                      <VoiceIndicator
-                        onPress={() => navigation.push('ProDetail')}
-                        style={styles.voiceItem}
-                      />
-                    ) : null}
                   </View>
                   <Text style={styles.total}>
                     {formatBytes(selectedBytes)} selected download
                   </Text>
-                  {(starting || selectedOutcomes.length > 0) && (
+                  {(starting || showProgress) && (
                     <View style={styles.progressTrack}>
                       <View
                         style={[
                           styles.progressFill,
-                          { width: `${Math.max(2, progress * 100)}%` },
+                          { width: `${progress * 100}%` },
                         ]}
                       />
                     </View>
@@ -248,6 +248,13 @@ export const AutoSetupScreen: React.FC<Props> = ({
           ))}
         </View>
 
+        {VoiceIndicator ? (
+          <VoiceIndicator
+            onPress={() => navigation.push('ProDetail')}
+            style={styles.voiceItem}
+          />
+        ) : null}
+
         {!selected && (
           <Card style={styles.errorCard}>
             <Text style={styles.error}>
@@ -259,12 +266,14 @@ export const AutoSetupScreen: React.FC<Props> = ({
         <Button
           title="Configure it yourself"
           variant="ghost"
+          style={styles.textAction}
           onPress={() => navigation.push('AdvancedSetup')}
           testID="auto-setup-advanced"
         />
         <Button
           title="Skip for Now"
           variant="ghost"
+          style={styles.textAction}
           onPress={() => navigation.replace('Main')}
           testID="auto-setup-skip"
         />
@@ -293,13 +302,13 @@ function outcomeLabel(
   return '';
 }
 
-const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: { flex: 1, backgroundColor: colors.background },
   content: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.xl,
     paddingBottom: SPACING.xxl,
-    gap: SPACING.md,
+    gap: SPACING.sm,
   },
   center: {
     flex: 1,
@@ -308,36 +317,38 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     gap: SPACING.md,
     padding: SPACING.xl,
   },
-  eyebrow: { ...TYPOGRAPHY.label, color: colors.primary },
-  title: { ...TYPOGRAPHY.h2, color: colors.text },
-  secondary: { ...TYPOGRAPHY.body, color: colors.textSecondary },
-  planGrid: { gap: SPACING.sm },
+  title: { ...TYPOGRAPHY.h2, color: colors.text, textAlign: 'left' as const },
+  secondary: { ...TYPOGRAPHY.body, color: colors.textSecondary, textAlign: 'left' as const },
+  planGrid: { gap: SPACING.xs },
   planCard: {
     borderWidth: 1,
     borderColor: colors.border,
     gap: SPACING.xs,
-    padding: SPACING.md,
+    padding: SPACING.sm,
     borderRadius: SPACING.sm,
   },
   selectedCard: { borderColor: colors.primary },
-  planTitle: { ...TYPOGRAPHY.h3, color: colors.text },
+  planHeading: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  planTitle: { ...TYPOGRAPHY.h3, color: colors.text, textAlign: 'left' as const },
   expandedPlan: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
     marginTop: SPACING.xs,
-    paddingTop: SPACING.sm,
-    gap: SPACING.sm,
+    paddingTop: SPACING.xs,
+    gap: SPACING.xs,
   },
-  includesLabel: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
-  planItems: { gap: SPACING.sm },
+  planItems: { gap: 0 },
   planItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: SPACING.sm,
-    backgroundColor: colors.surfaceLight,
+    minHeight: 44,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   unavailableItem: {
     padding: SPACING.sm,
@@ -347,7 +358,15 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     padding: SPACING.sm,
     gap: SPACING.xs,
     borderRadius: SPACING.sm,
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: colors.surface,
+    ...shadows.small,
+  },
+  textAction: {
+    alignSelf: 'flex-start' as const,
+    justifyContent: 'flex-start' as const,
+    marginLeft: SPACING.md,
+    paddingHorizontal: 0,
+    paddingVertical: SPACING.sm,
   },
   choiceControl: {
     width: 44,
@@ -360,14 +379,20 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     color: colors.text,
     flex: 1,
     minWidth: 0,
+    textAlign: 'left' as const,
   },
   itemSize: {
     ...TYPOGRAPHY.meta,
     color: colors.textSecondary,
     flexShrink: 0,
   },
-  total: { ...TYPOGRAPHY.meta, color: colors.primary },
-  itemKind: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted, width: 48 },
+  total: { ...TYPOGRAPHY.meta, color: colors.primary, textAlign: 'left' as const },
+  itemKind: {
+    ...TYPOGRAPHY.labelSmall,
+    color: colors.textMuted,
+    textAlign: 'right' as const,
+    flexShrink: 0,
+  },
   progressTrack: {
     height: SPACING.xs,
     backgroundColor: colors.surfaceLight,
