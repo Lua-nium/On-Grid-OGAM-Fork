@@ -94,16 +94,27 @@ export async function loadAutoSetupCompatibleCatalog(
     payload: { modelId: model.id },
   }));
 
-  const video = boundaries.videoAvailable?.() ? CATALOG.flatMap(model => {
-    if (model.kind !== 'video' || model.availability === 'coming_soon' ||
-        !model.minRamGb || model.minRamGb > ramGB || videoPackError(model.files) ||
-        model.files.some(file => !file.sizeBytes)) return [];
+  const completeVideoPacks = CATALOG.filter(model =>
+    model.kind === 'video' && model.availability !== 'coming_soon' &&
+    !!model.minRamGb && !videoPackError(model.files) &&
+    model.files.every(file => !!file.sizeBytes),
+  );
+  const videoAvailable = boundaries.videoAvailable?.() ?? false;
+  const video = videoAvailable ? completeVideoPacks.flatMap(model => {
+    if (model.minRamGb! > ramGB) return [];
     const sizeBytes = model.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
     if (fileExceedsBudget(sizeBytes, ramGB)) return [];
     return [{
       id: model.id, name: model.name, kind: 'video' as const, sizeBytes,
-      fitScore: ramFitScore(model.minRamGb, ramGB), payload: model,
+      fitScore: ramFitScore(model.minRamGb!, ramGB), payload: model,
     }];
   }) : [];
-  return { text, image, stt, video };
+  const minimumVideoRamGB = Math.min(...completeVideoPacks.map(model => model.minRamGb!));
+  const videoExclusionReason = video.length ? undefined
+    : !videoAvailable ? 'This app build does not include the local video engine.'
+    : !completeVideoPacks.length ? 'No complete video model pack is available in the catalog.'
+    : ramGB < minimumVideoRamGB
+      ? `Auto Setup recommends at least ${minimumVideoRamGB} GB RAM for video. This device reports ${ramGB.toFixed(1)} GB. Select Configure it yourself to review video models.`
+      : 'Video packs exceed this device\'s Auto Setup memory budget. Select Configure it yourself to review video models.';
+  return { text, image, stt, video, videoExclusionReason };
 }

@@ -26,10 +26,12 @@ export interface AutoSetupPlan {
     ...AutoSetupCandidate<ModelEntry>[],
   ];
   totalBytes: number;
+  videoExclusionReason?: string;
 }
 
 export interface AutoSetupCompatibleCatalog {
   video?: AutoSetupCandidate<ModelEntry>[];
+  videoExclusionReason?: string;
   text: AutoSetupCandidate<{ modelId: string; file: ModelFile }>[];
   image: AutoSetupCandidate<ImageModelDescriptor>[];
   stt: AutoSetupCandidate<{ modelId: string }>[];
@@ -121,6 +123,7 @@ function selectAutoSetupPlan(
     ...PLAN_COPY[tier],
     items,
     totalBytes: items.reduce((total, item) => total + item.sizeBytes, 0),
+    ...(video ? {} : { videoExclusionReason: catalog.videoExclusionReason }),
   };
 }
 

@@ -187,7 +187,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
                       <View style={styles.planItem}>
                         <Text style={styles.itemKind}>VIDEO</Text>
                         <Text style={styles.itemSize}>
-                          No compatible video model is included for this device.
+                          {plan.videoExclusionReason ?? 'No video model is included in this Auto Setup plan.'}
                         </Text>
                       </View>
                     )}
