@@ -226,6 +226,7 @@ class VideoGenerationService {
     };
   };
   private update(patch: Partial<VideoGenerationJobContract>) {
+    if (this.cancelled && patch.stage !== undefined) return;
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener();
   }
@@ -251,6 +252,7 @@ class VideoGenerationService {
     this.cancelled = true;
     this.abort.abort();
     if (this.state.phase === 'running') {
+      this.update({ error: 'Video stop requested.', progress: null, preview: null });
       await videoGenerator.cancel();
       if (this.state.stage === 'enhancing')
         await getActiveEngineService()?.stopGeneration();
