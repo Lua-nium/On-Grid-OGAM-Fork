@@ -8,11 +8,11 @@
 #include <cstring>
 
 static BOOL OGSaveRgbPng(const sd_image_t &image, NSString *output) {
-  if (!image.data || image.channel != 3) return NO;
-  CFDataRef data = CFDataCreate(kCFAllocatorDefault, image.data, image.width * image.height * 3);
+  if (!image.data || (image.channel != 3 && image.channel != 4)) return NO;
+  CFDataRef data = CFDataCreate(kCFAllocatorDefault, image.data, image.width * image.height * image.channel);
   CGDataProviderRef provider = data ? CGDataProviderCreateWithCFData(data) : nullptr;
   CGColorSpaceRef color = CGColorSpaceCreateDeviceRGB();
-  CGImageRef bitmap = provider ? CGImageCreate(image.width, image.height, 8, 24, image.width * 3, color, kCGImageAlphaNone, provider, nullptr, false, kCGRenderingIntentDefault) : nullptr;
+  CGImageRef bitmap = provider ? CGImageCreate(image.width, image.height, 8, 8 * image.channel, image.width * image.channel, color, image.channel == 4 ? kCGImageAlphaLast : kCGImageAlphaNone, provider, nullptr, false, kCGRenderingIntentDefault) : nullptr;
   NSData *png = bitmap ? UIImagePNGRepresentation([UIImage imageWithCGImage:bitmap]) : nil;
   if (bitmap) CGImageRelease(bitmap);
   CGColorSpaceRelease(color); if (provider) CGDataProviderRelease(provider); if (data) CFRelease(data);
@@ -247,6 +247,15 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
             if (!image.data || image.channel != 3 || image.width != request.width || image.height != request.height)
               throw std::runtime_error("The image engine returned invalid pixels.");
             if (!OGSaveRgbPng(image, output)) throw std::runtime_error("Could not save the image.");
+          }, std::max(0, [input[@"previewInterval"] intValue]), [&](int step, const sd_image_t &image) {
+            NSString *path = [output stringByAppendingString:@".preview.png"];
+            if (!OGSaveRgbPng(image, path)) return;
+            const int total = request.steps;
+            dispatch_async(dispatch_get_main_queue(), ^{
+              if (self->_listeners) [self sendEventWithName:@"SDImageProgress" body:@{
+                @"step":@(step), @"totalSteps":@(total), @"progress":@(total > 0 ? double(step) / total : 0), @"previewPath":path
+              }];
+            });
           });
           if (self->_runtime.cancelled.load()) throw std::runtime_error("Image generation stopped.");
         } catch (const std::exception &error) {
@@ -255,6 +264,7 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
         dispatch_async(dispatch_get_main_queue(), ^{
           self->_busy = NO;
           [self restoreScreenIdleTimer];
+          [[NSFileManager defaultManager] removeItemAtPath:[output stringByAppendingString:@".preview.png"] error:nil];
           if (failure) reject(@"IMAGE_FAILED", failure, nil);
           else resolve(@{@"id":input[@"id"], @"imagePath":output, @"width":input[@"width"], @"height":input[@"height"], @"seed":input[@"seed"]});
         });

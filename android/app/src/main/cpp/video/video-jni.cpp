@@ -160,7 +160,7 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
   }
 }
 extern "C" JNIEXPORT jbyteArray JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeGenerateImage(
-  JNIEnv *env, jobject self, jstring prompt, jstring negative, jint width, jint height, jint steps, jdouble guidance, jdouble seed) {
+  JNIEnv *env, jobject self, jstring prompt, jstring negative, jint width, jint height, jint steps, jdouble guidance, jdouble seed, jint previewInterval) {
   jbyteArray output = nullptr;
   jobject owner = nullptr;
   try {
@@ -173,8 +173,9 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_ai_offgridmobile_video_VideoGenerat
     if (!owner) throw std::runtime_error("Could not retain the image host.");
     auto klass = env->GetObjectClass(self);
     auto progress = env->GetMethodID(klass, "imageProgress", "(II)V");
+    auto preview = env->GetMethodID(klass, "imagePreview", "([BIIII)V");
     env->DeleteLocalRef(klass);
-    if (!progress) throw std::runtime_error("Missing image progress callback.");
+    if (!progress || !preview) throw std::runtime_error("Missing image progress callback.");
     runtime.image(request, [&](int step, int total) {
       AttachedEnv thread(vm);
       if (!thread.env) { runtime.cancel(); return; }
@@ -187,6 +188,18 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_ai_offgridmobile_video_VideoGenerat
       output = env->NewByteArray(static_cast<jsize>(size));
       if (!output) throw std::runtime_error("Not enough memory to save the image.");
       env->SetByteArrayRegion(output, 0, size, reinterpret_cast<jbyte *>(image.data));
+    }, previewInterval, [&](int step, const sd_image_t &image) {
+      const uint64_t size = uint64_t(image.width) * image.height * image.channel;
+      if (!image.data || (image.channel != 3 && image.channel != 4) || size > INT32_MAX) return;
+      AttachedEnv thread(vm);
+      if (!thread.env) return;
+      jbyteArray bytes = thread.env->NewByteArray(static_cast<jsize>(size));
+      if (bytes) {
+        thread.env->SetByteArrayRegion(bytes, 0, size, reinterpret_cast<jbyte *>(image.data));
+        thread.env->CallVoidMethod(owner, preview, bytes, image.width, image.height, image.channel, step);
+        thread.env->DeleteLocalRef(bytes);
+      }
+      if (thread.env->ExceptionCheck()) thread.env->ExceptionClear();
     });
   } catch (const std::exception &error) {
     if (!env->ExceptionCheck()) {

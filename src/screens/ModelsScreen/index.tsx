@@ -1,3 +1,4 @@
+import { EmbeddingModelsTab } from './EmbeddingModelsTab';
 import { VideoModelsTab } from './VideoModelsTab';
 import type { HFSearchResult } from '@offgrid/models';
 import React, { useCallback, useRef, useState } from 'react';
@@ -25,6 +26,7 @@ const MODEL_TABS: ReadonlyArray<{
   testID?: string;
 }> = [
   { key: 'text', label: 'Text' },
+  { key: 'embedding', label: 'Embedding', testID: 'embedding-tab' },
   { key: 'image', label: 'Image' },
   { key: 'video', label: 'Video' },
   { key: 'voice', label: 'Voice', testID: 'voice-models-tab' },
@@ -227,6 +229,8 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({
           isRepairingVisionModel={vm.isRepairingVisionModel}
         />
       )}
+
+      {vm.activeTab === 'embedding' && <EmbeddingModelsTab />}
 
       {/* Image Models Tab */}
       {vm.activeTab === 'video' && <VideoModelsTab selected={selectedVideoModel} setSelected={setSelectedVideoModel} />}

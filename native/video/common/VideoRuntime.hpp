@@ -157,13 +157,16 @@ public:
   }
   void image(const VideoRequest &request,
              const std::function<void(int, int)> &progress,
-             const std::function<void(const sd_image_t &)> &save) {
+             const std::function<void(const sd_image_t &)> &save,
+             int previewInterval = 0,
+             const std::function<void(int, const sd_image_t &)> &preview = {}) {
     std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
     if (!execution.owns_lock()) throw std::runtime_error("Image or video generation is running.");
     if (!imageContext) throw std::runtime_error("Image model is unloaded.");
     sd_image_t *images = nullptr; int count = 0;
     auto cleanup = [&] {
       sd_set_progress_callback(nullptr, nullptr);
+      sd_set_preview_callback(nullptr, PREVIEW_NONE, 0, false, false, nullptr);
       if (images) free_sd_images(images, count);
     };
     try {
@@ -171,6 +174,15 @@ public:
       sd_set_progress_callback([](int step, int total, float, void *data) {
         (*static_cast<const std::function<void(int, int)> *>(data))(step, total);
       }, const_cast<void *>(static_cast<const void *>(&progress)));
+      if (preview && previewInterval > 0) {
+        // Project the existing latent tensor. Do not run an extra VAE decode.
+        sd_set_preview_callback([](int step, int count, sd_image_t* frames, bool, void* data) {
+          if (count < 1 || !frames || !frames[0].data) return;
+          try { (*static_cast<const std::function<void(int, const sd_image_t &)>*>(data))(step, frames[0]); }
+          catch (...) { /* Optional previews must not fail generation. */ }
+        }, PREVIEW_PROJ, previewInterval, true, false,
+           const_cast<void*>(static_cast<const void*>(&preview)));
+      }
       sd_img_gen_params_t params; sd_img_gen_params_init(&params);
       params.prompt = request.prompt.c_str(); params.negative_prompt = request.negative.c_str();
       params.width = request.width; params.height = request.height; params.seed = request.seed;

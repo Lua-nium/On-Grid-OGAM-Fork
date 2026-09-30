@@ -212,3 +212,64 @@ export async function resolveSDImagePack(_modelId: string, modelPath: string) {
     llm: required(/^Qwen3VL-.*\.gguf$/i),
   };
 }
+
+export const BUNDLED_EMBEDDING_MODEL = {
+  id: 'bundled:all-MiniLM-L6-v2-Q8_0', name: 'MiniLM L6 (built-in)',
+  description: 'English text search. Included with the app.', size: 0, downloadUrl: undefined,
+} as const;
+
+/** Pinned Hugging Face files; runtime validation is still required on each phone. */
+export const RECOMMENDED_EMBEDDING_MODELS = [
+  {
+    id: 'leliuga/all-MiniLM-L12-v2-GGUF@f048c4f3577816f9825989a59a7eed3c9afa3f1d/all-MiniLM-L12-v2.Q8_0.gguf',
+    name: 'MiniLM L12', description: 'English text search, 12-layer encoder.', size: 36413728,
+    downloadUrl: 'https://huggingface.co/leliuga/all-MiniLM-L12-v2-GGUF/resolve/f048c4f3577816f9825989a59a7eed3c9afa3f1d/all-MiniLM-L12-v2.Q8_0.gguf',
+    sha256: '161d07a32057e754e1fe82e30547c736032ab255a6719890b7e76414c565b748',
+  },
+  {
+    id: 'armand01/paraphrase-multilingual-MiniLM-L12-v2-Q6_K-GGUF@34b69e1683fccf80bbbe7255b8651cd7a76e8891/paraphrase-multilingual-minilm-l12-v2.Q6_K.gguf',
+    name: 'Multilingual MiniLM L12', description: 'Text search across multiple languages.', size: 130844160,
+    downloadUrl: 'https://huggingface.co/armand01/paraphrase-multilingual-MiniLM-L12-v2-Q6_K-GGUF/resolve/34b69e1683fccf80bbbe7255b8651cd7a76e8891/paraphrase-multilingual-minilm-l12-v2.Q6_K.gguf',
+    sha256: 'b5780f54a02b2e9a1cded186d349800aedfd6fb38635c41f532a9385fed34d32',
+  },
+] as const;
+
+/** GGUF text encoders are candidates until the local runtime validates the file. */
+export async function searchEmbeddingModels(query: string, signal?: AbortSignal) {
+  const params = new URLSearchParams({
+    search: query.trim(), filter: 'gguf',
+    sort: 'downloads', direction: '-1', limit: '20',
+  });
+  const searches = await Promise.all(['sentence-similarity', 'feature-extraction'].map(async tag => {
+    const response = await fetch(`https://huggingface.co/api/models?${params}&pipeline_tag=${tag}`, { signal });
+    if (!response.ok) throw new Error(`Embedding search failed: HTTP ${response.status}`);
+    return await response.json() as { id: string }[];
+  }));
+  const repos = [...new Map(searches.flat().map(repo => [repo.id, repo])).values()];
+  const listings = await Promise.allSettled(repos.map(async repo => {
+    const result = await fetch(`https://huggingface.co/api/models/${repo.id}?blobs=true`, { signal });
+    if (!result.ok) throw new Error(`Could not read ${repo.id}`);
+    const data = await result.json() as {
+      sha: string;
+      gguf?: { architecture?: string };
+      siblings?: { rfilename: string; size?: number; lfs?: { size: number; sha256?: string } }[];
+    };
+    if (!/^[a-f0-9]{40}$/i.test(data.sha) || (data.gguf?.architecture && data.gguf.architecture !== 'bert')) return [];
+    return (data.siblings ?? []).filter(file =>
+      /\.gguf$/i.test(file.rfilename) &&
+      !/mmproj|(?:-\d{5}-of-\d{5})/i.test(file.rfilename) &&
+      (file.lfs?.size ?? file.size ?? 0) > 0,
+    ).map(file => ({
+      id: `${repo.id}@${data.sha}/${file.rfilename}`,
+      name: `${repo.id} / ${file.rfilename}`,
+      size: file.lfs?.size ?? file.size ?? 0,
+      sha256: file.lfs?.sha256,
+      downloadUrl: `https://huggingface.co/${repo.id}/resolve/${data.sha}/${file.rfilename.split('/').map(encodeURIComponent).join('/')}`,
+    }));
+  }));
+  if (signal?.aborted) throw new Error('Embedding search cancelled');
+  if (listings.length && listings.every(result => result.status === 'rejected')) {
+    throw new Error('Could not read embedding model files. Try again.');
+  }
+  return listings.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+}

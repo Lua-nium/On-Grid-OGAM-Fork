@@ -98,10 +98,12 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
             })
         }.onFailure { destination.delete() }
     }
-    private fun saveRgbPng(rgb: ByteArray, width: Int, height: Int, destination: File) {
-        require(width > 0 && height > 0 && rgb.size.toLong() == width.toLong() * height * 3)
+    private fun saveRgbPng(rgb: ByteArray, width: Int, height: Int, destination: File, channels: Int = 3) {
+        require(width > 0 && height > 0 && channels in 3..4 && rgb.size.toLong() == width.toLong() * height * channels)
         val pixels = IntArray(width * height) { i ->
-            android.graphics.Color.rgb(rgb[i * 3].toInt() and 255, rgb[i * 3 + 1].toInt() and 255, rgb[i * 3 + 2].toInt() and 255)
+            val offset = i * channels
+            android.graphics.Color.argb(if (channels == 4) rgb[offset + 3].toInt() and 255 else 255,
+                rgb[offset].toInt() and 255, rgb[offset + 1].toInt() and 255, rgb[offset + 2].toInt() and 255)
         }
         val bitmap = android.graphics.Bitmap.createBitmap(pixels, width, height, android.graphics.Bitmap.Config.ARGB_8888)
         try { destination.outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) } }
@@ -174,7 +176,22 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
     private external fun nativeLoadImage(path: String, weight: String, vae: String, llm: String, threads: Int, cpuOnly: Boolean)
     private external fun nativeUnloadImage()
     private external fun nativeImagePath(): String
-    private external fun nativeGenerateImage(prompt: String, negative: String, width: Int, height: Int, steps: Int, guidance: Double, seed: Double): ByteArray
+    private external fun nativeGenerateImage(prompt: String, negative: String, width: Int, height: Int, steps: Int, guidance: Double, seed: Double, previewInterval: Int): ByteArray
+    private var imagePreviewFile: File? = null
+    private var imageSteps = 0
+    fun imagePreview(pixels: ByteArray, width: Int, height: Int, channels: Int, step: Int) {
+        if (cancelled.get()) return
+        val file = imagePreviewFile ?: return
+        runCatching {
+            saveRgbPng(pixels, width, height, file, channels)
+            if (context.hasActiveReactInstance()) context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("SDImageProgress", Arguments.createMap().apply {
+                    putInt("step", step); putInt("totalSteps", imageSteps)
+                    putDouble("progress", if (imageSteps > 0) step.toDouble() / imageSteps else 0.0)
+                    putString("previewPath", file.path)
+                })
+        }
+    }
     fun imageProgress(step: Int, total: Int) {
         if (!context.hasActiveReactInstance()) return
         context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("SDImageProgress", Arguments.createMap().apply {
@@ -215,7 +232,9 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
                 VideoGenerationService.cancel = { stop() }
                 ContextCompat.startForegroundService(context, Intent(context, VideoGenerationService::class.java).putExtra("modality", "image"))
                 VideoGenerationService.admission.get(5, TimeUnit.SECONDS)
-                val bytes = nativeGenerateImage(checkNotNull(input.getString("prompt")), input.getString("negativePrompt") ?: "", width, height, input.getInt("steps"), input.getDouble("guidanceScale"), input.getDouble("seed"))
+                imagePreviewFile = File(output.path + ".preview.png")
+                imageSteps = input.getInt("steps")
+                val bytes = nativeGenerateImage(checkNotNull(input.getString("prompt")), input.getString("negativePrompt") ?: "", width, height, input.getInt("steps"), input.getDouble("guidanceScale"), input.getDouble("seed"), if (input.hasKey("previewInterval")) input.getInt("previewInterval").coerceAtLeast(0) else 0)
                 check(!cancelled.get()) { "Image generation stopped." }
                 saveRgbPng(bytes, width, height, output)
                 check(!cancelled.get()) { "Image generation stopped." }
@@ -223,7 +242,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
                     putString("imagePath", output.path); putInt("width", width); putInt("height", height); putDouble("seed", input.getDouble("seed")); putString("id", input.getString("id"))
                 })
             } catch (error: Throwable) { output?.delete(); promise.reject("IMAGE_FAILED", error.message, error) }
-            finally { VideoGenerationService.cancel = null; context.stopService(Intent(context, VideoGenerationService::class.java)); busy.set(false) }
+            finally { imagePreviewFile?.delete(); imagePreviewFile = null; VideoGenerationService.cancel = null; context.stopService(Intent(context, VideoGenerationService::class.java)); busy.set(false) }
         }
     }
     override fun invalidate() {
