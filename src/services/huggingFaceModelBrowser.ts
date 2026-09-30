@@ -160,7 +160,9 @@ export function getSDImageModels(): HFImageModel[] {
     .map(model => ({
       id: `sd-${model.id.replaceAll('/', '--')}`,
       name: model.name, displayName: model.name, backend: 'sd' as const,
-      repo: model.id, fileName: model.files[0].name, downloadUrl: model.files[0].url,
+      // Quant variants can have a distinct catalog ID in the same HF repository.
+      repo: model.files[0].url.match(/^https:\/\/huggingface\.co\/([^/]+\/[^/]+)\/resolve\//i)?.[1] ?? model.id,
+      fileName: model.files[0].name, downloadUrl: model.files[0].url,
       size: model.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0),
       huggingFaceFiles: model.files.map(file => ({ path: file.name, size: file.sizeBytes ?? 0, downloadUrl: file.url, sha256: file.sha256 })),
     }));
