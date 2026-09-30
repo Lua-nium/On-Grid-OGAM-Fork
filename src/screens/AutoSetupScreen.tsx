@@ -353,7 +353,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: SPACING.sm,
   },
   selectedCard: { borderColor: colors.primary },
-  planHeader: { gap: SPACING.xs },
+  planHeader: {
+    gap: SPACING.xs,
+    minHeight: 44,
+    justifyContent: 'center' as const,
+  },
   planHeading: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -388,6 +392,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...shadows.small,
   },
   textAction: {
+    minHeight: 44,
     alignSelf: 'stretch' as const,
     justifyContent: 'center' as const,
     paddingHorizontal: 0,
