@@ -13,7 +13,7 @@ const MB = 1024 * 1024;
 type CompatibleTextModel = ReturnType<typeof recommendedModelsForDevice>[number];
 
 export interface AutoSetupCatalogBoundaries {
-  totalMemoryGB: () => number;
+  totalMemoryGB: () => number | Promise<number>;
   videoAvailable?: () => boolean;
   fetchTextFiles: typeof fetchModelFiles;
   imageRecommendation: typeof hardwareService.getImageModelRecommendation;
@@ -21,7 +21,10 @@ export interface AutoSetupCatalogBoundaries {
 }
 
 const productionCatalogBoundaries: AutoSetupCatalogBoundaries = {
-  totalMemoryGB: () => hardwareService.getTotalMemoryGB(),
+  totalMemoryGB: async () => {
+    await hardwareService.getDeviceInfo();
+    return hardwareService.getTotalMemoryGB();
+  },
   videoAvailable: () => videoGenerator.available(),
   fetchTextFiles: fetchModelFiles,
   imageRecommendation: () => hardwareService.getImageModelRecommendation(),
@@ -53,7 +56,7 @@ export function buildAutoSetupTextCandidates(
 export async function loadAutoSetupCompatibleCatalog(
   boundaries: AutoSetupCatalogBoundaries = productionCatalogBoundaries,
 ): Promise<AutoSetupCompatibleCatalog> {
-  const ramGB = boundaries.totalMemoryGB();
+  const ramGB = await boundaries.totalMemoryGB();
   const textModels = recommendedModelsForDevice(ramGB).filter(model => model.type === 'vision');
   const files = await boundaries.fetchTextFiles(textModels);
   const text = buildAutoSetupTextCandidates(textModels, files, ramGB);
