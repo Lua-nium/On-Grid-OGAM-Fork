@@ -46,6 +46,7 @@ interface AutoSetupSnapshot {
   phase: 'loading_catalog' | 'ready' | 'downloading' | 'completed' | 'failed';
   plans: AutoSetupPlan[];
   selectedTier: AutoSetupTier;
+  selectedKinds: AutoSetupPlan['items'][number]['kind'][];
   outcomes: Record<string, AutoSetupItemOutcome>;
   error: string | null;
 }
@@ -55,6 +56,7 @@ export interface AutoSetupSession {
   subscribe(listener: () => void): () => void;
   load(): Promise<void>;
   selectTier(tier: AutoSetupTier): void;
+  toggleKind(kind: AutoSetupPlan['items'][number]['kind']): void;
   start(): Promise<void>;
   complete(): void;
   dispose(): void;
@@ -107,10 +109,10 @@ function message(error: unknown): string {
 }
 
 function initialOutcomes(
-  plan: AutoSetupPlan,
+  items: AutoSetupPlan['items'][number][],
 ): Record<string, AutoSetupItemOutcome> {
   return Object.fromEntries(
-    plan.items.map(item => {
+    items.map(item => {
       const id = autoSetupDownloadId(item);
       return [id, { id, phase: 'waiting', progress: 0 }];
     }),
@@ -173,6 +175,7 @@ export function createAutoSetupSession(
     phase: 'loading_catalog',
     plans: [],
     selectedTier: tierFromPersistedIntent(),
+    selectedKinds: ['text'],
     outcomes: {},
     error: null,
   };
@@ -186,6 +189,8 @@ export function createAutoSetupSession(
   const selectedPlan = (): AutoSetupPlan | undefined =>
     state.plans.find(plan => plan.tier === state.selectedTier) ??
     state.plans[0];
+  const selectedItems = (plan: AutoSetupPlan) =>
+    plan.items.filter(item => state.selectedKinds.includes(item.kind));
 
   const stopActive = async (cancelled: boolean): Promise<void> => {
     const ids = [...activeIds];
@@ -270,17 +275,27 @@ export function createAutoSetupSession(
   const start = async (): Promise<void> => {
     const plan = selectedPlan();
     if (!plan || disposed) return;
+    const items = selectedItems(plan);
+    if (items.length === 0) return;
     const token = ++operation;
+    publish({ phase: 'downloading', error: null });
     await stopActive(false);
-    const existing = await downloads.list();
+    let existing: ModelDownload[];
+    try {
+      existing = await downloads.list();
+    } catch (error) {
+      if (!disposed && token === operation)
+        publish({ phase: 'failed', error: message(error) });
+      return;
+    }
     if (disposed || token !== operation) return;
     const completedIds = new Set(
       existing
         .filter(download => download.status === 'completed')
         .map(download => download.id),
     );
-    const outcomes = initialOutcomes(plan);
-    for (const item of plan.items) {
+    const outcomes = initialOutcomes(items);
+    for (const item of items) {
       const id = autoSetupDownloadId(item);
       if (completedIds.has(id))
         outcomes[id] = { id, phase: 'completed', progress: 1 };
@@ -363,18 +378,26 @@ export function createAutoSetupSession(
         error: null,
       });
     },
+    toggleKind(kind) {
+      if (state.phase === 'downloading') return;
+      if (!selectedPlan()?.items.some(item => item.kind === kind)) return;
+      const selectedKinds = state.selectedKinds.includes(kind)
+        ? state.selectedKinds.filter(selected => selected !== kind)
+        : [...state.selectedKinds, kind];
+      publish({ selectedKinds, outcomes: {}, error: null, phase: 'ready' });
+    },
     start,
     complete() {
       const plan = selectedPlan();
       if (plan && state.phase === 'completed') {
         const app = useAppStore.getState();
-        if (app.activeModelId === null) {
+        if (state.selectedKinds.includes('text') && app.activeModelId === null) {
           activeModelService.selectTextModel(plan.items[0].id);
         }
-        if (app.activeImageModelId === null) {
+        if (state.selectedKinds.includes('image') && app.activeImageModelId === null) {
           app.setActiveImageModelId(plan.items[1].id);
         }
-        if (app.activeVideoModelId === null && plan.items[3]) {
+        if (state.selectedKinds.includes('video') && app.activeVideoModelId === null && plan.items[3]) {
           app.setActiveVideoModelId(plan.items[3].id);
         }
       }

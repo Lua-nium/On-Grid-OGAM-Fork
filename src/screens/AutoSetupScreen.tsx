@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card } from '../components';
@@ -55,9 +56,14 @@ export const AutoSetupScreen: React.FC<Props> = ({
   const selected =
     snapshot.plans.find(plan => plan.tier === snapshot.selectedTier) ??
     snapshot.plans[0];
+  const selectedItems = selected?.items.filter(item =>
+    snapshot.selectedKinds.includes(item.kind),
+  ) ?? [];
+  const selectedBytes = selectedItems.reduce(
+    (total, item) => total + item.sizeBytes, 0,
+  );
   const selectedOutcomes =
-    selected?.items.map(item => snapshot.outcomes[autoSetupDownloadId(item)]) ??
-    [];
+    selectedItems.map(item => snapshot.outcomes[autoSetupDownloadId(item)]);
   const progress =
     selectedOutcomes.length === 0
       ? 0
@@ -113,7 +119,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
           {snapshot.plans.map(plan => (
             <Card
               key={plan.tier}
-              onPress={() => session.selectTier(plan.tier)}
+              onPress={selected?.tier === plan.tier ? undefined : () => session.selectTier(plan.tier)}
               style={{
                 ...styles.planCard,
                 ...(width >= 700 ? styles.planCardWide : {}),
@@ -128,25 +134,63 @@ export const AutoSetupScreen: React.FC<Props> = ({
                   style={styles.expandedPlan}
                   testID="auto-setup-selected-plan"
                 >
-                  <Text style={styles.includesLabel}>INCLUDES</Text>
+                  <Text style={styles.includesLabel}>CHOOSE MODELS</Text>
                   <View style={styles.planItems}>
-                    {plan.items.map(item => (
-                      <View
-                        key={`${plan.tier}:${item.kind}:${item.id}`}
-                        style={styles.planItem}
-                      >
-                        <Text style={styles.itemKind}>
-                          {labelForItem(item)}
-                        </Text>
-                        <Text style={styles.planItemName}>{item.name}</Text>
-                        <Text style={styles.itemSize}>
-                          {formatBytes(item.sizeBytes)}
-                          {outcomeLabel(
-                            snapshot.outcomes[autoSetupDownloadId(item)],
+                    {plan.items.map(item => {
+                      const checked = snapshot.selectedKinds.includes(item.kind);
+                      return (
+                        <View
+                          key={`${plan.tier}:${item.kind}:${item.id}`}
+                          style={styles.planItem}
+                        >
+                          <Button
+                            title={labelForItem(item)}
+                            icon={
+                              <Icon
+                                name={checked ? 'check-square' : 'square'}
+                                size={18}
+                                color={checked ? colors.primary : colors.textSecondary}
+                              />
+                            }
+                            variant="ghost"
+                            size="small"
+                            active={checked}
+                            style={styles.choiceControl}
+                            onPress={() => session.toggleKind(item.kind)}
+                            disabled={starting}
+                            accessibilityRole="checkbox"
+                            accessibilityLabel={`Include ${item.name}, ${formatBytes(item.sizeBytes)}`}
+                            accessibilityState={{ checked, disabled: starting }}
+                            testID={`auto-setup-choice-${item.kind}`}
+                          />
+                          <Text style={styles.planItemName}>{item.name}</Text>
+                          <Text style={styles.itemSize}>
+                            {formatBytes(item.sizeBytes)}
+                            {outcomeLabel(
+                              snapshot.outcomes[autoSetupDownloadId(item)],
+                            )}
+                          </Text>
+                          {item.kind === 'video' && plan.items[3] && (
+                            <>
+                              <Text style={styles.includesLabel}>REQUIRED FILES</Text>
+                              {plan.items[3].payload.files.map(file => (
+                                <Text key={file.name} style={styles.itemSize}>
+                                  {file.name} - {formatBytes(file.sizeBytes ?? 0)}
+                                </Text>
+                              ))}
+                            </>
                           )}
+                        </View>
+                      );
+                    })}
+                    {!plan.items[3] && (
+                      <View style={styles.planItem}>
+                        <Text style={styles.itemKind}>VIDEO</Text>
+                        <Text style={styles.itemSize}>
+                          No compatible video model is included for this device.
                         </Text>
                       </View>
-                    ))}
+                    )}
                     {VoiceIndicator ? (
                       <VoiceIndicator
                         onPress={() => navigation.push('ProDetail')}
@@ -154,18 +198,8 @@ export const AutoSetupScreen: React.FC<Props> = ({
                       />
                     ) : null}
                   </View>
-                  {plan.items[3] && (
-                    <View style={styles.videoFiles}>
-                      <Text style={styles.includesLabel}>VIDEO FILES</Text>
-                      {plan.items[3].payload.files.map(file => (
-                        <Text key={file.name} style={styles.itemSize}>
-                          {file.name} - {formatBytes(file.sizeBytes ?? 0)}
-                        </Text>
-                      ))}
-                    </View>
-                  )}
                   <Text style={styles.total}>
-                    {formatBytes(plan.totalBytes)} download
+                    {formatBytes(selectedBytes)} selected download
                   </Text>
                   {(starting || selectedOutcomes.length > 0) && (
                     <View style={styles.progressTrack}>
@@ -191,12 +225,13 @@ export const AutoSetupScreen: React.FC<Props> = ({
                       title={
                         snapshot.phase === 'failed'
                           ? 'Retry Downloads'
-                          : `Download ${formatBytes(plan.totalBytes)}`
+                          : `Download ${formatBytes(selectedBytes)}`
                       }
                       onPress={() => {
                         session.start().catch(() => undefined);
                       }}
                       loading={starting}
+                      disabled={selectedItems.length === 0}
                       testID="auto-setup-download"
                     />
                   )}
@@ -289,15 +324,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     gap: SPACING.sm,
   },
   includesLabel: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
-  planItems: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
-    gap: SPACING.sm,
-  },
-  videoFiles: { gap: SPACING.xs },
+  planItems: { gap: SPACING.sm },
   planItem: {
-    flexBasis: '45%' as const,
-    flexGrow: 1,
     gap: SPACING.xs,
     padding: SPACING.sm,
     borderWidth: 1,
@@ -305,6 +333,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderRadius: SPACING.sm,
     backgroundColor: colors.surfaceLight,
   },
+  choiceControl: { justifyContent: 'flex-start' as const },
   planItemName: { ...TYPOGRAPHY.body, color: colors.text },
   itemSize: {
     ...TYPOGRAPHY.meta,
