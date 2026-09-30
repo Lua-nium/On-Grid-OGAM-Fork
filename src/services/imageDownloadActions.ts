@@ -1,3 +1,4 @@
+import { resolveSDImagePack, resolveSDImageDownloadFiles } from './huggingFaceModelBrowser';
 /** Standalone async image download handlers - no hooks. All download state flows through
  *  useDownloadStore via the stable image:<id> modelKey (single source of truth). */
 import { Platform } from 'react-native';
@@ -308,6 +309,15 @@ export async function downloadHuggingFaceModel(
     deps.setAlertState(showAlert('Error', 'Invalid HuggingFace model configuration'));
     return;
   }
+  if (modelInfo.backend === 'sd') {
+    try {
+      const files = await resolveSDImageDownloadFiles(modelInfo.huggingFaceRepo, modelInfo.huggingFaceFiles);
+      modelInfo = { ...modelInfo, huggingFaceFiles: files, size: files.reduce((sum, file) => sum + file.size, 0) };
+    } catch (error) {
+      deps.setAlertState(showAlert('Download unavailable', error instanceof Error ? error.message : 'Could not verify the image files.'));
+      return;
+    }
+  }
   const syntheticId = makeMultifileId(modelInfo.id);
   const created = addImageEntry({
     modelId: modelInfo.id,
@@ -333,7 +343,7 @@ export async function downloadHuggingFaceModel(
     await ensureDirectory(imageModelsDir);
     await ensureDirectory(modelDir);
 
-    const files = modelInfo.huggingFaceFiles.map((file) => ({
+    const files = modelInfo.huggingFaceFiles!.map((file) => ({
       relativePath: file.path,
       size: file.size,
       expectedSize: modelInfo.backend === 'sd' ? file.size : undefined,
@@ -343,6 +353,7 @@ export async function downloadHuggingFaceModel(
     await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);
     await validateMultifileComplete(modelDir, files); // reject a silently-truncated part before registering
+    if (modelInfo.backend === 'sd') await resolveSDImagePack(modelInfo.id, modelDir);
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
     await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});

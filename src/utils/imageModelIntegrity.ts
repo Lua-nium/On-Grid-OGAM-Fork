@@ -18,7 +18,7 @@
  */
 import RNFS from 'react-native-fs';
 import { statFile } from './fileStat';
-import { getSDImagePackFiles, isSDImageWeight } from '../services/huggingFaceModelBrowser';
+import { getSDImagePackFiles, isSDImageWeight, validateSDCheckpointFile } from '../services/huggingFaceModelBrowser';
 import { unzip } from 'react-native-zip-archive';
 import { ImageModelIncompleteError } from './modelLoadErrors';
 import logger from './logger';
@@ -159,7 +159,14 @@ export async function validateImageModelDir(modelPath: string, backend: ImageBac
   let items: ReadDirItem[];
   try { items = await RNFS.readDir(dir); } catch { return { complete: false, missing: ['<unreadable model dir>'] }; }
   const files: ImageDirEntry[] = items.map(i => ({ name: i.name, size: Number(i.size) || 0, isFile: i.isFile() }));
-  return checkImageModelFiles(files, backend);
+  const result = checkImageModelFiles(files, backend);
+  if (backend === 'sd' && result.complete) {
+    const pack = getSDImagePackFiles(files.filter(file => file.isFile).map(file => file.name));
+    if (pack?.length === 1 && !await validateSDCheckpointFile(`${dir}/${pack[0].path}`)) {
+      return { complete: false, missing: ['complete SD checkpoint with image model, text encoder, and VAE'] };
+    }
+  }
+  return result;
 }
 
 /**

@@ -1,4 +1,3 @@
-import { extractQuantization } from '@offgrid/models';
 import { getSDImageModels, getSDImagePackFiles, isSDImageWeight } from '../huggingFaceModelBrowser';
 import RNFS from 'react-native-fs';
 import { statFile } from '../../utils/fileStat';
@@ -7,7 +6,7 @@ import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../typ
 import { loadDownloadedModels, saveModelsList } from './storage';
 import { basenameOf } from './reconcileStoredPaths';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
-import { ensureImageExtractionComplete, validateMultifileComplete } from '../../utils/imageModelIntegrity';
+import { ensureImageExtractionComplete, validateMultifileComplete, validateImageModelDir } from '../../utils/imageModelIntegrity';
 // Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
 import { isMMProjFile, pickMmProjForModel } from '../mmproj';
 
@@ -149,7 +148,7 @@ async function buildRecoveredImageModel(
   const sdWeight = backend === 'sd' ? (await RNFS.readDir(item.path)).find(file => file.isFile() && isSDImageWeight(file.name))?.name : undefined;
   return {
     id: item.name,
-    name: getSDImageModels().find(model => model.id === item.name)?.displayName ?? (sdWeight ? `Qwen Image 2.1 ${extractQuantization(sdWeight)}` : item.name.replaceAll('_', ' ')),
+    name: getSDImageModels().find(model => model.id === item.name)?.displayName ?? (sdWeight ? sdWeight.replace(/\.(gguf|safetensors)$/i, '') : item.name.replaceAll('_', ' ')),
     description: '',
     modelPath,
     size: totalSize,
@@ -244,6 +243,7 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
       const hasReady = await RNFS.exists(readyPath);
 
       if (hasReady) {
+        if (detectBackend(item.name) === 'sd' && !(await validateImageModelDir(item.path, 'sd')).complete) continue;
         // Unzip completed but registerAndNotify was killed — register now.
         const newModel = await buildRecoveredImageModel(item, detectBackend(item.name));
         await addImageModel(newModel);

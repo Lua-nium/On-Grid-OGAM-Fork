@@ -1,3 +1,4 @@
+import { resolveSDImagePack } from '../../services/huggingFaceModelBrowser';
 import RNFS from 'react-native-fs';
 import { statFile } from '../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
@@ -200,8 +201,9 @@ async function resumeMultifileDownload(ctx: ResumeCtx): Promise<void> {
   const hfFiles = metadata.imageModelHuggingFaceFiles as ImageModelDescriptor['huggingFaceFiles'];
   const coremlFiles = metadata.imageModelCoremlFiles as ImageModelDescriptor['coremlFiles'];
   await validateMultifileComplete(modelDir, hfFiles
-    ? hfFiles.map(file => ({ relativePath: file.path, sha256: file.sha256 }))
+    ? hfFiles.map(file => ({ relativePath: file.path, sha256: file.sha256, expectedSize: metadata.imageModelBackend === 'sd' ? file.size : undefined }))
     : (coremlFiles ?? []).map(file => ({ relativePath: file.relativePath })));
+  if (metadata.imageModelBackend === 'sd') await resolveSDImagePack(modelId, modelDir);
   await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8');
   const imageModel: ONNXImageModel = {
     id: modelId, name: metadata.imageModelName, description: metadata.imageModelDescription,

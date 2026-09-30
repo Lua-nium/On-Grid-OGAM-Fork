@@ -30,18 +30,19 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [sdSearchRevision, setSDSearchRevision] = useState(0);
   useEffect(() => {
     let current = true;
+    const controller = new AbortController();
     setSDSearchModels([]);
     setSDSearchError(null);
     const query = imageSearchQuery.trim();
     if (!query) { setSDSearchLoading(false); return; }
     setSDSearchLoading(true);
     const timer = setTimeout(() => {
-      searchSDImageModels(query)
+      searchSDImageModels(query, controller.signal)
         .then(models => { if (current) setSDSearchModels(models); })
         .catch(error => { if (current) setSDSearchError(error.message ?? 'Image search failed. Try again.'); })
         .finally(() => { if (current) setSDSearchLoading(false); });
     }, 300);
-    return () => { current = false; clearTimeout(timer); };
+    return () => { current = false; controller.abort(); clearTimeout(timer); };
   }, [imageSearchQuery, sdSearchRevision]);
 
   const [imageRec, setImageRec] = useState<ImageModelRecommendation | null>(null);
