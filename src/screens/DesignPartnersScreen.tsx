@@ -10,7 +10,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { useThemedStyles } from '../theme';
 import type { ThemeColors } from '../theme';
 
-const PARTNER_EMAIL = 'mac@getoffgridai.co';
+const PARTNER_EMAIL = 'design.partners@getoffgridai.co';
 const OFFER = [
   {
     title: 'Free setup and implementation',
