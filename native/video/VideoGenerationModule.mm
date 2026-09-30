@@ -198,8 +198,12 @@ RCT_REMAP_METHOD(loadImageModel, loadImage:(NSDictionary *)input resolver:(RCTPr
       NSString *failure = nil;
       try {
         offgrid::VideoRequest request{};
-        request.weight = [input[@"weight"] UTF8String]; request.vae = [input[@"vae"] UTF8String];
-        request.llm = [input[@"llm"] UTF8String]; request.threads = [input[@"threads"] intValue]; request.cpuOnly = [input[@"cpuOnly"] boolValue];
+        request.weight = [input[@"weight"] UTF8String]; request.vae = [(input[@"vae"] ?: @"") UTF8String];
+        request.llm = [(input[@"llm"] ?: @"") UTF8String];
+        request.imageFamily = [(input[@"family"] ?: @"") UTF8String];
+        request.imageSampler = [(input[@"sampler"] ?: @"") UTF8String];
+        request.imageScheduler = [(input[@"scheduler"] ?: @"") UTF8String];
+        request.threads = [input[@"threads"] intValue]; request.cpuOnly = [input[@"cpuOnly"] boolValue];
         self->_runtime.loadImage(request, [input[@"modelPath"] UTF8String]);
       } catch (const std::exception &error) { failure = @(error.what()); }
       dispatch_async(dispatch_get_main_queue(), ^{
@@ -244,7 +248,7 @@ RCT_REMAP_METHOD(generateImage, generateImage:(NSDictionary *)input resolver:(RC
               if (self->_listeners) [self sendEventWithName:@"SDImageProgress" body:@{@"step":@(step), @"totalSteps":@(total), @"progress":@(total > 0 ? double(step) / total : 0)}];
             });
           }, [&](const sd_image_t &image) {
-            if (!image.data || image.channel != 3 || image.width != request.width || image.height != request.height)
+            if (!image.data || (image.channel != 3 && image.channel != 4) || image.width != request.width || image.height != request.height)
               throw std::runtime_error("The image engine returned invalid pixels.");
             if (!OGSaveRgbPng(image, output)) throw std::runtime_error("Could not save the image.");
           }, std::max(0, [input[@"previewInterval"] intValue]), [&](int step, const sd_image_t &image) {

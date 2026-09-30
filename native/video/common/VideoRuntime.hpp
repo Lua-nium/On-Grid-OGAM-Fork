@@ -22,6 +22,7 @@ struct VideoRequest {
   float flowShift = 0;
   bool cpuOnly = false;
   int threads = 4;
+  std::string imageFamily, imageSampler, imageScheduler;
 };
 // One instance per process. Both host bridges use the same native lifecycle.
 class VideoRuntime {
@@ -30,10 +31,13 @@ class VideoRuntime {
   sd_ctx_t *context = nullptr;
   sd_ctx_t *imageContext = nullptr;
   std::string imagePath;
+  sample_method_t imageSampler = EULER_SAMPLE_METHOD;
+  scheduler_t imageScheduler = SCHEDULER_COUNT;
   sd_ctx_t *loadContext(const VideoRequest &request, std::string &preferred) {
       sd_ctx_params_t config;
       sd_ctx_params_init(&config);
-      config.diffusion_model_path = request.weight.c_str();
+      if (request.imageFamily == "checkpoint") config.model_path = request.weight.c_str();
+      else config.diffusion_model_path = request.weight.c_str();
       config.vae_path = request.vae.c_str();
       config.t5xxl_path = request.encoder.c_str();
       config.llm_path = request.llm.c_str();
@@ -132,6 +136,12 @@ public:
   void loadImage(const VideoRequest &request, const std::string &path) {
     std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
     if (!execution.owns_lock()) throw std::runtime_error("Image or video generation is running.");
+    if (!request.imageFamily.empty() && request.imageFamily != "checkpoint" && request.imageFamily != "qwen-image-2.1")
+      throw std::runtime_error("This image model family is not supported.");
+    const auto sampler = request.imageSampler.empty() ? EULER_SAMPLE_METHOD : str_to_sample_method(request.imageSampler.c_str());
+    const auto scheduler = request.imageScheduler.empty() ? SCHEDULER_COUNT : str_to_scheduler(request.imageScheduler.c_str());
+    if (sampler == SAMPLE_METHOD_COUNT || (!request.imageScheduler.empty() && scheduler == SCHEDULER_COUNT))
+      throw std::runtime_error("The image sampler or scheduler is not supported.");
     {
       std::lock_guard<std::mutex> guard(contextMutex);
       if (imageContext) free_sd_ctx(imageContext);
@@ -143,6 +153,8 @@ public:
     std::lock_guard<std::mutex> guard(contextMutex);
     if (cancelled.load()) { free_sd_ctx(loaded); throw std::runtime_error("Image loading stopped."); }
     imageContext = loaded; imagePath = path;
+    imageSampler = sampler;
+    imageScheduler = scheduler == SCHEDULER_COUNT ? sd_get_default_scheduler(loaded, sampler) : scheduler;
   }
   void unloadImage() {
     std::unique_lock<std::mutex> execution(executionMutex, std::try_to_lock);
@@ -189,8 +201,8 @@ public:
       params.batch_count = 1;
       params.sample_params.sample_steps = request.steps;
       params.sample_params.guidance.txt_cfg = request.guidance;
-      params.sample_params.sample_method = EULER_SAMPLE_METHOD;
-      params.sample_params.scheduler = sd_get_default_scheduler(imageContext, EULER_SAMPLE_METHOD);
+      params.sample_params.sample_method = imageSampler;
+      params.sample_params.scheduler = imageScheduler;
       params.vae_tiling_params.enabled = true;
       if (!generate_image(imageContext, &params, &images, &count) || !images || count != 1)
         throw std::runtime_error("The image engine produced no image.");

@@ -173,7 +173,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
             }
         }
     }
-    private external fun nativeLoadImage(path: String, weight: String, vae: String, llm: String, threads: Int, cpuOnly: Boolean)
+    private external fun nativeLoadImage(path: String, weight: String, vae: String, llm: String, threads: Int, cpuOnly: Boolean, family: String, sampler: String, scheduler: String)
     private external fun nativeUnloadImage()
     private external fun nativeImagePath(): String
     private external fun nativeGenerateImage(prompt: String, negative: String, width: Int, height: Int, steps: Int, guidance: Double, seed: Double, previewInterval: Int): ByteArray
@@ -205,7 +205,13 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
         executor.execute {
             try {
                 prepareHexagonRuntime()
-                nativeLoadImage(checkNotNull(input.getString("modelPath")), checkNotNull(input.getString("weight")), checkNotNull(input.getString("vae")), checkNotNull(input.getString("llm")), input.getInt("threads"), input.getBoolean("cpuOnly"))
+                nativeLoadImage(checkNotNull(input.getString("modelPath")), checkNotNull(input.getString("weight")),
+                    if (input.hasKey("vae")) input.getString("vae") ?: "" else "",
+                    if (input.hasKey("llm")) input.getString("llm") ?: "" else "",
+                    input.getInt("threads"), input.getBoolean("cpuOnly"),
+                    if (input.hasKey("family")) input.getString("family") ?: "" else "",
+                    if (input.hasKey("sampler")) input.getString("sampler") ?: "" else "",
+                    if (input.hasKey("scheduler")) input.getString("scheduler") ?: "" else "")
                 promise.resolve(true)
             } catch (error: Throwable) { promise.reject("IMAGE_LOAD_FAILED", error.message, error) }
             finally { busy.set(false) }
@@ -236,7 +242,7 @@ class VideoGenerationModule(private val context: ReactApplicationContext) : Reac
                 imageSteps = input.getInt("steps")
                 val bytes = nativeGenerateImage(checkNotNull(input.getString("prompt")), input.getString("negativePrompt") ?: "", width, height, input.getInt("steps"), input.getDouble("guidanceScale"), input.getDouble("seed"), if (input.hasKey("previewInterval")) input.getInt("previewInterval").coerceAtLeast(0) else 0)
                 check(!cancelled.get()) { "Image generation stopped." }
-                saveRgbPng(bytes, width, height, output)
+                saveRgbPng(bytes, width, height, output, bytes.size / (width * height))
                 check(!cancelled.get()) { "Image generation stopped." }
                 promise.resolve(Arguments.createMap().apply {
                     putString("imagePath", output.path); putInt("width", width); putInt("height", height); putDouble("seed", input.getDouble("seed")); putString("id", input.getString("id"))

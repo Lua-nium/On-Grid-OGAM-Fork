@@ -138,11 +138,12 @@ extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationMod
 }
 
 extern "C" JNIEXPORT void JNICALL Java_ai_offgridmobile_video_VideoGenerationModule_nativeLoadImage(
-  JNIEnv *env, jobject, jstring path, jstring weight, jstring vae, jstring llm, jint threads, jboolean cpuOnly) {
+  JNIEnv *env, jobject, jstring path, jstring weight, jstring vae, jstring llm, jint threads, jboolean cpuOnly, jstring family, jstring sampler, jstring scheduler) {
   try {
     offgrid::VideoRequest request{};
     request.weight = string(env, weight); request.vae = string(env, vae); request.llm = string(env, llm);
     request.threads = threads; request.cpuOnly = cpuOnly;
+    request.imageFamily = string(env, family); request.imageSampler = string(env, sampler); request.imageScheduler = string(env, scheduler);
     runtime.loadImage(request, string(env, path));
   } catch (const std::exception &error) {
     auto klass = env->FindClass("java/lang/IllegalStateException");
@@ -183,7 +184,7 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_ai_offgridmobile_video_VideoGenerat
       if (thread.env->ExceptionCheck()) { thread.env->ExceptionClear(); runtime.cancel(); }
     }, [&](const sd_image_t &image) {
       const uint64_t size = uint64_t(image.width) * image.height * image.channel;
-      if (!image.data || image.width != uint32_t(width) || image.height != uint32_t(height) || image.channel != 3 || size > INT32_MAX)
+      if (!image.data || image.width != uint32_t(width) || image.height != uint32_t(height) || (image.channel != 3 && image.channel != 4) || size > INT32_MAX)
         throw std::runtime_error("The image engine returned invalid pixels.");
       output = env->NewByteArray(static_cast<jsize>(size));
       if (!output) throw std::runtime_error("Not enough memory to save the image.");
