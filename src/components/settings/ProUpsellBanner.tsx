@@ -50,7 +50,7 @@ export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro, onDesignPa
           <View style={styles.headerText}>
             <Text style={styles.title}>Off Grid AI Pro</Text>
             <Text style={styles.desc}>
-              Private memory and live sync across your devices.
+              Keep your work in context with memory, Sync, and actions you approve.
             </Text>
           </View>
           <TouchableOpacity
