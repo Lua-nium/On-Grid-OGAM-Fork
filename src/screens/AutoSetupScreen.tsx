@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useSyncExternalStore } from 'react';
-import { ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,7 +8,7 @@ import { LoadingDots } from '../components/LoadingDots';
 import { SLOTS, useSlot } from '../bootstrap/slotRegistry';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import type { RootStackParamList } from '../navigation/types';
-import type { AutoSetupItem } from '../services/autoSetupPlan';
+import type { AutoSetupItem, AutoSetupTier } from '../services/autoSetupPlan';
 import {
   autoSetupDownloadId,
   createAutoSetupSession,
@@ -27,11 +27,11 @@ type Props = {
 };
 
 const labelForItem = (item: AutoSetupItem) => {
-  if (item.kind === 'text') return 'TEXT + VISION';
+  if (item.kind === 'text') return 'TEXT';
   if (item.kind === 'image') return 'IMAGE';
   if (item.kind === 'video') return 'VIDEO';
-  if (item.kind === 'embedding') return 'SEARCH MODEL';
-  return 'SPEECH INPUT';
+  if (item.kind === 'embedding') return 'SEARCH';
+  return 'SPEECH';
 };
 
 export const AutoSetupScreen: React.FC<Props> = ({
@@ -44,10 +44,12 @@ export const AutoSetupScreen: React.FC<Props> = ({
     session.snapshot,
     session.snapshot,
   );
-  const { width } = useWindowDimensions();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const VoiceIndicator = useSlot(SLOTS.autoSetupVoiceIndicator);
+  const [expandedTier, setExpandedTier] = useState<AutoSetupTier | null>(
+    () => session.snapshot().selectedTier,
+  );
 
   useEffect(() => {
     session.load().catch(() => undefined);
@@ -118,21 +120,27 @@ export const AutoSetupScreen: React.FC<Props> = ({
           </Card>
         )}
 
-        <View style={[styles.planGrid, width >= 700 && styles.planGridWide]}>
+        <View style={styles.planGrid}>
           {snapshot.plans.map(plan => (
             <Card
               key={plan.tier}
-              onPress={selected?.tier === plan.tier ? undefined : () => session.selectTier(plan.tier)}
+              onPress={starting ? undefined : () => {
+                if (expandedTier === plan.tier) {
+                  setExpandedTier(null);
+                  return;
+                }
+                if (selected?.tier !== plan.tier) session.selectTier(plan.tier);
+                setExpandedTier(plan.tier);
+              }}
               style={{
                 ...styles.planCard,
-                ...(width >= 700 ? styles.planCardWide : {}),
                 ...(selected?.tier === plan.tier ? styles.selectedCard : {}),
               }}
               testID={`auto-setup-plan-${plan.tier}`}
             >
               <Text style={styles.planTitle}>{plan.title}</Text>
               <Text style={styles.secondary}>{plan.summary}</Text>
-              {selected?.tier === plan.tier && (
+              {expandedTier === plan.tier && (
                 <View
                   style={styles.expandedPlan}
                   testID="auto-setup-selected-plan"
@@ -141,20 +149,17 @@ export const AutoSetupScreen: React.FC<Props> = ({
                   <View style={styles.planItems}>
                     {[...plan.items, ...(plan.embedding ? [plan.embedding] : [])].map(item => {
                       const checked = snapshot.selectedKinds.includes(item.kind);
+                      const installed = snapshot.installedIds.includes(autoSetupDownloadId(item));
+                      const size = item.kind === 'embedding' && item.sizeBytes === 0
+                        ? 'Included' : formatBytes(item.sizeBytes);
                       return (
-                        <View
+                        <Card
                           key={`${plan.tier}:${item.kind}:${item.id}`}
                           style={styles.planItem}
                         >
                           <Button
-                            title={labelForItem(item)}
-                            icon={
-                              <Icon
-                                name={checked ? 'check-square' : 'square'}
-                                size={18}
-                                color={checked ? colors.primary : colors.textSecondary}
-                              />
-                            }
+                            title=""
+                            icon={<Icon name={checked ? 'check-square' : 'square'} size={20} color={checked ? colors.primary : colors.textSecondary} />}
                             variant="ghost"
                             size="small"
                             active={checked}
@@ -162,38 +167,22 @@ export const AutoSetupScreen: React.FC<Props> = ({
                             onPress={() => session.toggleKind(item.kind)}
                             disabled={starting}
                             accessibilityRole="checkbox"
-                            accessibilityLabel={`Include ${item.name}, ${formatBytes(item.sizeBytes)}`}
+                            accessibilityLabel={`Include ${item.name}, ${size}${installed ? ', already downloaded' : ''}`}
                             accessibilityState={{ checked, disabled: starting }}
                             testID={`auto-setup-choice-${item.kind}`}
                           />
-                          <Text style={styles.planItemName}>{item.name}</Text>
-                          <Text style={styles.itemSize}>
-                            {item.kind === 'embedding' && item.sizeBytes === 0
-                              ? 'Included with the app' : formatBytes(item.sizeBytes)}
-                            {snapshot.installedIds.includes(autoSetupDownloadId(item))
-                              ? ' - READY'
-                              : outcomeLabel(snapshot.outcomes[autoSetupDownloadId(item)])}
+                          <Text style={styles.itemKind}>{labelForItem(item)}</Text>
+                          <Text style={styles.planItemName} numberOfLines={1}>
+                            {item.name}
                           </Text>
-                          {item.kind === 'video' && plan.items[3] && (
-                            <>
-                              <Text style={styles.includesLabel}>REQUIRED FILES</Text>
-                              {plan.items[3].payload.files.map(file => (
-                                <Text key={file.name} style={styles.itemSize}>
-                                  {file.name} - {formatBytes(file.sizeBytes ?? 0)}
-                                </Text>
-                              ))}
-                            </>
-                          )}
-                          {item.kind === 'embedding' && (
-                            <Text style={styles.itemSize}>
-                              Download only. To change the search model, open Models and confirm an index rebuild.
-                            </Text>
-                          )}
-                        </View>
+                          <Text style={styles.itemSize}>
+                            {size}{installed ? '' : outcomeLabel(snapshot.outcomes[autoSetupDownloadId(item)])}
+                          </Text>
+                        </Card>
                       );
                     })}
                     {!plan.items[3] && (
-                      <View style={styles.planItem}>
+                      <View style={styles.unavailableItem}>
                         <Text style={styles.itemKind}>VIDEO</Text>
                         <Text style={styles.itemSize}>
                           {plan.videoExclusionReason ?? 'No video model is included in this Auto Setup plan.'}
@@ -203,7 +192,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
                     {VoiceIndicator ? (
                       <VoiceIndicator
                         onPress={() => navigation.push('ProDetail')}
-                        style={styles.planItem}
+                        style={styles.voiceItem}
                       />
                     ) : null}
                   </View>
@@ -323,7 +312,6 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   title: { ...TYPOGRAPHY.h2, color: colors.text },
   secondary: { ...TYPOGRAPHY.body, color: colors.textSecondary },
   planGrid: { gap: SPACING.sm },
-  planGridWide: { flexDirection: 'row' as const },
   planCard: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -331,7 +319,6 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     padding: SPACING.md,
     borderRadius: SPACING.sm,
   },
-  planCardWide: { flex: 1 },
   selectedCard: { borderColor: colors.primary },
   planTitle: { ...TYPOGRAPHY.h3, color: colors.text },
   expandedPlan: {
@@ -344,21 +331,43 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   includesLabel: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
   planItems: { gap: SPACING.sm },
   planItem: {
-    gap: SPACING.xs,
-    padding: SPACING.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
     borderRadius: SPACING.sm,
     backgroundColor: colors.surfaceLight,
   },
-  choiceControl: { justifyContent: 'flex-start' as const },
-  planItemName: { ...TYPOGRAPHY.body, color: colors.text },
+  unavailableItem: {
+    padding: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  voiceItem: {
+    padding: SPACING.sm,
+    gap: SPACING.xs,
+    borderRadius: SPACING.sm,
+    backgroundColor: colors.surfaceLight,
+  },
+  choiceControl: {
+    width: 44,
+    height: 44,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  planItemName: {
+    ...TYPOGRAPHY.body,
+    color: colors.text,
+    flex: 1,
+    minWidth: 0,
+  },
   itemSize: {
     ...TYPOGRAPHY.meta,
     color: colors.textSecondary,
+    flexShrink: 0,
   },
   total: { ...TYPOGRAPHY.meta, color: colors.primary },
-  itemKind: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
+  itemKind: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted, width: 48 },
   progressTrack: {
     height: SPACING.xs,
     backgroundColor: colors.surfaceLight,
