@@ -18,6 +18,7 @@ import { buildVoiceNoteHandlers } from './voiceNoteSend';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 import { useAppStore } from '../../stores';
+import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useUiModeStore } from '../../stores';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { AppSheet } from '../AppSheet';
@@ -329,6 +330,35 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     onImageModeChange?.(newMode);
   };
 
+  const handleVideoModeToggle = () => {
+    if (imageMode !== 'video') {
+      const { activeVideoModelId, downloadedVideoModels, setActiveVideoModelId } =
+        useAppStore.getState();
+      const remoteVideoId =
+        useRemoteServerStore.getState().activeRemoteMediaServerIds.video;
+      const localVideoSelected = downloadedVideoModels.some(
+        model => model.id === activeVideoModelId,
+      );
+      if (!remoteVideoId && !localVideoSelected) {
+        if (downloadedVideoModels.length === 0) {
+          setAlertState(
+            showAlert(
+              'No Video Model',
+              'Download a video generation model from the Models screen to enable this feature.',
+              [{ text: 'OK' }],
+            ),
+          );
+          quickSettings.hide();
+          return;
+        }
+        setActiveVideoModelId(downloadedVideoModels[0].id);
+      }
+    }
+    const newMode: ImageModeState = imageMode === 'video' ? 'auto' : 'video';
+    setImageMode(newMode);
+    onImageModeChange?.(newMode);
+  };
+
   const handleVisionPress = () => {
     if (!supportsVision) {
       setAlertState(buildNoVisionAlert({ isRemote, needsRepair: visionNeedsRepair, onRepairVision, dismiss: () => setAlertState(hideAlert()) }));
@@ -446,9 +476,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           onCancelRecording={cancelRecording}
           onStop={onStop}
           onImageModeToggle={handleImageModeToggle}
-          onVideoModeToggle={() =>
-            setImageMode(imageMode === 'video' ? 'auto' : 'video')
-          }
+          onVideoModeToggle={handleVideoModeToggle}
           onThinkingToggle={handleThinkingToggle}
           onToolsPress={onToolsPress}
           onMcpPress={onMcpPress}
@@ -617,9 +645,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         anchorX={quickSettings.anchor.x}
         imageMode={imageMode}
         onImageModeToggle={handleImageModeToggle}
-        onVideoModeToggle={() =>
-          setImageMode(imageMode === 'video' ? 'auto' : 'video')
-        }
+        onVideoModeToggle={handleVideoModeToggle}
         imageModelLoaded={imageModelLoaded}
         supportsThinking={supportsThinking}
         supportsToolCalling={supportsToolCalling}

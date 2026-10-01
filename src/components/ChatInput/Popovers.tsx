@@ -220,6 +220,7 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
               </TouchableOpacity>
 
               <TouchableOpacity
+                testID="quick-video-mode"
                 disabled={!onVideoModeToggle}
                 accessibilityRole="button"
                 accessibilityState={{
@@ -227,15 +228,37 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                   disabled: !onVideoModeToggle,
                 }}
                 style={popoverStyles.row}
-                onPress={onVideoModeToggle}
+                onPress={() => {
+                  triggerHaptic('impactLight');
+                  onVideoModeToggle?.();
+                }}
               >
-                <Icon name="video" size={16} color={colors.text} />
+                <Icon
+                  name="video"
+                  size={16}
+                  color={imageMode === 'video' ? colors.primary : colors.textMuted}
+                />
                 <Text style={[popoverStyles.rowLabel, { color: colors.text }]}>
                   Video Gen
                 </Text>
-                <Text style={{ color: colors.text }}>
-                  {imageMode === 'video' ? 'ON' : 'OFF'}
-                </Text>
+                <View
+                  style={[
+                    popoverStyles.badge,
+                    {
+                      backgroundColor:
+                        imageMode === 'video' ? colors.primary : colors.textMuted,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      popoverStyles.badgeText,
+                      { color: colors.background },
+                    ]}
+                  >
+                    {imageMode === 'video' ? 'ON' : 'OFF'}
+                  </Text>
+                </View>
               </TouchableOpacity>
 
               {supportsThinking && (
