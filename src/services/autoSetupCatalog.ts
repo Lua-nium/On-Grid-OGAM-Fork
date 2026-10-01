@@ -88,7 +88,9 @@ export async function loadAutoSetupCompatibleCatalog(
     name: `${model.name} Speech`,
     kind: 'stt' as const,
     sizeBytes: model.size * MB,
-    fitScore: Math.abs(model.size - Math.min(809, ramGB * 100)),
+    fitScore: model.id === 'large-v3-turbo'
+      ? 0
+      : Math.abs(model.size - Math.min(809, ramGB * 100)),
     payload: { modelId: model.id },
   }));
 
@@ -97,7 +99,10 @@ export async function loadAutoSetupCompatibleCatalog(
     !!model.minRamGb && !videoPackError(model.files) &&
     model.files.every(file => !!file.sizeBytes),
   );
-  const video = completeVideoPacks.map(model => {
+  const video = completeVideoPacks.filter(model =>
+    model.minRamGb! <= ramGB ||
+    (ramGB >= 11 && model.id === 'Comfy-Org/Wan_2.1_ComfyUI_repackaged'),
+  ).map(model => {
     const sizeBytes = model.files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
     return {
       id: model.id, name: model.name, kind: 'video' as const, sizeBytes,
@@ -105,7 +110,9 @@ export async function loadAutoSetupCompatibleCatalog(
     };
   });
   const videoExclusionReason = video.length ? undefined
-    : 'Auto Setup has no complete video model to download.';
+    : completeVideoPacks.length
+      ? "No video model meets Auto Setup's memory limit."
+      : 'Auto Setup has no complete video model to download.';
   const embedding = [BUNDLED_EMBEDDING_MODEL, ...RECOMMENDED_EMBEDDING_MODELS]
     .map((model, index) => ({
       id: model.id,
