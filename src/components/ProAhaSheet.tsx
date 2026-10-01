@@ -1,11 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import Icon from 'react-native-vector-icons/Feather';
+import type { TextStyle, ViewStyle } from 'react-native';
 import { AppSheet } from './AppSheet';
 import { useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY, PRO_AHA_FEATURES } from '../constants';
-import { getPricingCopy } from '../utils/proPricing';
 
 interface ProAhaSheetProps {
   visible: boolean;
@@ -15,39 +14,41 @@ interface ProAhaSheetProps {
 
 export const ProAhaSheet: React.FC<ProAhaSheetProps> = ({ visible, onClose, onRegister }) => {
   const styles = useThemedStyles(createStyles);
-  const pricing = getPricingCopy();
-
-  const handleCta = () => {
-    onClose();
-    onRegister();
-  };
-
   return (
-    <AppSheet visible={visible} onClose={onClose} enableDynamicSizing title="Off Grid AI Pro">
+    <AppSheet visible={visible} onClose={onClose}>
       <View style={styles.content}>
-        <Text style={styles.headline}>It already knows what you did today.</Text>
-        <Text style={styles.subheadline}>{pricing.sheetSubheadline}</Text>
-
+        <Text style={styles.headline}>Unlock Pro Features</Text>
+        <Text style={styles.subheadline}>Pro is automatically unlocked</Text>
         <View style={styles.featureList}>
-          {PRO_AHA_FEATURES.map(feature => (
-            <View key={feature} style={styles.featureRow}>
-              <Icon name="check" size={14} color={styles.checkIcon.color} />
-              <Text style={styles.featureText}>{feature}</Text>
+          {PRO_AHA_FEATURES.map((feature, index) => (
+            <View key={`${String(feature)}-${index}`} style={styles.featureRow}>
+              <Text style={styles.checkIcon}>✓</Text>
+              <Text style={styles.featureText}>{String(feature)}</Text>
             </View>
           ))}
         </View>
-
-        <Text style={styles.guarantee}>{pricing.sheetFooter}</Text>
-
-        <TouchableOpacity style={styles.ctaButton} onPress={handleCta}>
-          <Text style={styles.ctaText}>{pricing.cta}</Text>
+        <TouchableOpacity onPress={onClose}>
+          <Text style={styles.subheadline}>Alright</Text>
         </TouchableOpacity>
       </View>
     </AppSheet>
   );
 };
 
-const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows): {
+  content: ViewStyle;
+  headline: TextStyle;
+  subheadline: TextStyle;
+  priceRow: ViewStyle;
+  price: TextStyle;
+  featureList: ViewStyle;
+  featureRow: ViewStyle;
+  checkIcon: TextStyle;
+  featureText: TextStyle;
+  guarantee: TextStyle;
+  ctaButton: ViewStyle;
+  ctaText: TextStyle;
+} => ({
   content: {
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.md,

@@ -45,10 +45,10 @@ export interface ProEntitlementProvider {
 const UNAVAILABLE_PROVIDER: ProEntitlementProvider = {
   readActive: async () => false,
   getInfo: async () => ({
-    isPro: false,
-    credentialSaved: false,
+    isPro: true,
+    credentialSaved: true,
     expired: false,
-    tier: null,
+    tier: 'lifetime',
     expiry: null,
     verifiedAt: 0,
   }),

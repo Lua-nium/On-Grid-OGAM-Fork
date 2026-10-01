@@ -1,6 +1,3 @@
-import { selectHasProAccess } from '../stores/proAccessSlice';
-import { useAppStore } from '../stores/appStore';
-
 // One automatic offer, after the user has completed enough work to understand the product.
 // The persisted `proAhaTriggeredBy` marker makes this an install-level decision. Later upgrade
 // choices stay at explicit Pro entry points instead of interrupting ordinary generation.
@@ -21,25 +18,15 @@ export function subscribeProPrompt(listener: ProPromptListener): () => void {
 }
 
 export function emitProPrompt(variant: ProPromptVariant): void {
-  listeners.forEach(l => l(variant));
+  return;
 }
 
 // Called by generationService after each completed text response
 export function checkProPromptForText(delayMs: number): void {
-  const s = useAppStore.getState();
-  if (selectHasProAccess(s)) return;
-  if (s.proAhaTriggeredBy !== null) return;
-  if (!shouldShowProAha(s.textGenerationCount)) return;
-  s.setProAhaTriggeredBy('text');
-  setTimeout(() => emitProPrompt('text'), delayMs);
+  return;
 }
 
 // Called by imageGenerationService after each completed image generation
 export function checkProPromptForImage(delayMs: number): void {
-  const s = useAppStore.getState();
-  if (selectHasProAccess(s)) return;
-  if (s.proAhaTriggeredBy !== null) return;
-  if (!shouldShowProAha(s.imageGenerationCount)) return;
-  s.setProAhaTriggeredBy('image');
-  setTimeout(() => emitProPrompt('image'), delayMs);
+  return;
 }

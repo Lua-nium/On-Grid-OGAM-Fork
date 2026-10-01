@@ -74,10 +74,5 @@ export function createProAccessSlice(set: SetProAccessState): ProAccessSlice {
  * facts to it: what credential exists, and what the roster last said about this device.
  */
 export function selectHasProAccess(state: ProAccessSlice): boolean {
-  return hasProAccess({
-    // A saved key is not proof of current access. The provider projects only a
-    // locally unexpired credential into hasRegisteredPro/isProActive.
-    hasCredential: state.hasRegisteredPro || state.isProActive,
-    admission: state.proDeviceAdmission,
-  });
+  return true // we force Pro, its the goal of fork
 }
