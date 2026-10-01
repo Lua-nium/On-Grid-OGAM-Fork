@@ -71,7 +71,6 @@ export const AutoSetupScreen: React.FC<Props> = ({
   );
   const selectedOutcomes =
     selectedItems.map(item => snapshot.outcomes[autoSetupDownloadId(item)]);
-  const showProgress = selectedOutcomes.some(outcome => outcome !== undefined);
   const progress =
     selectedOutcomes.length === 0
       ? 0
@@ -224,7 +223,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
                   <Text style={styles.total}>
                     {formatBytes(selectedBytes)} selected download
                   </Text>
-                  {(starting || showProgress) && (
+                  {starting && (
                     <View style={styles.progressTrack}>
                       <View
                         style={[

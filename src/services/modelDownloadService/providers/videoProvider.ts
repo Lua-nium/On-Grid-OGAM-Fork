@@ -146,7 +146,7 @@ async function start(model: ModelEntry): Promise<void> {
         });
     else useDownloadStore.getState().remove(key(model.id));
   } finally {
-    if (transfer.cancelled) await RNFS.unlink(directory).catch(() => {});
+    // Keep completed pack files. A later download validates and reuses them.
     transfers.delete(model.id);
   }
 }
@@ -242,7 +242,6 @@ export const videoProvider: DownloadProvider = {
       if (transfer.nativeId)
         await backgroundDownloadService.cancelDownload(transfer.nativeId);
     }
-    if (!transfer) await RNFS.unlink(videoModelDirectory(modelId)).catch(() => {});
     useAppStore.getState().setVideoDownload(modelId, null);
     useDownloadStore.getState().remove(key(modelId));
   },
